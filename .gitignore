@@ -49,6 +49,3 @@ backend/node_modules/
 
 # Build artifacts
 build/
-
-# Sensitive files with API keys and secrets
-FantaVacanze/src/services/api.ts

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, FlatList } from 'react-native';
+import CustomHeader from '../components/CustomHeader';
 import { Text, Card, Button, Title, Paragraph, Avatar, List, Divider } from 'react-native-paper';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RouteProp } from '@react-navigation/native';
@@ -83,7 +84,9 @@ const VacationGroupScreen = ({ navigation, route }: Props) => {
   );
 
   return (
-    <ScrollView style={styles.container}>
+    <View style={styles.containerWrapper}>
+      <CustomHeader title={vacationGroup.name} />
+      <ScrollView style={styles.container}>
       <Card style={styles.headerCard}>
         <Card.Content>
           <Title style={styles.title}>{vacationGroup.name}</Title>
@@ -136,10 +139,15 @@ const VacationGroupScreen = ({ navigation, route }: Props) => {
         </Button>
       </View>
     </ScrollView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
+  containerWrapper: {
+    flex: 1,
+    backgroundColor: '#f5f5f5',
+  },
   container: {
     flex: 1,
     backgroundColor: '#f5f5f5',

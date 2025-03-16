@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import CustomHeader from '../components/CustomHeader';
 import { TextInput, Button, Text, Title } from 'react-native-paper';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
@@ -64,6 +65,7 @@ const RegisterScreen = ({ navigation }: Props) => {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
     >
+      <CustomHeader title="Registrazione" />
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         <View style={styles.headerContainer}>
           <Title style={styles.title}>Crea un Account</Title>

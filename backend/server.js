@@ -337,6 +337,211 @@ app.post('/api/users/:id/upload-avatar', upload.single('avatar'), (req, res) => 
   });
 });
 
+// Group Routes
+
+// Create a new group
+app.post('/api/groups', (req, res) => {
+  const { name, user_id } = req.body;
+  
+  if (!name || !user_id) {
+    return res.status(400).json({ error: 'Nome del gruppo e ID utente sono richiesti' });
+  }
+  
+  // Insert the new group into the database
+  const insertGroupQuery = 'INSERT INTO groups (name, created_by) VALUES (?, ?)';
+  db.query(insertGroupQuery, [name, user_id], (err, result) => {
+    if (err) {
+      console.error('Error creating group:', err);
+      return res.status(500).json({ error: 'Errore durante la creazione del gruppo' });
+    }
+    
+    const groupId = result.insertId;
+    
+    // Add the creator as a member of the group
+    const insertMemberQuery = 'INSERT INTO group_users (group_id, user_id, role) VALUES (?, ?, "admin")';
+    db.query(insertMemberQuery, [groupId, user_id], (err, memberResult) => {
+      if (err) {
+        console.error('Error adding member to group:', err);
+        return res.status(500).json({ error: 'Errore durante l\'aggiunta del membro al gruppo' });
+      }
+      
+      // Return the newly created group
+      const getGroupQuery = `
+        SELECT g.*, COUNT(gm.user_id) as participants, COALESCE(SUM(u.total_points), 0) as points
+        FROM groups g
+        LEFT JOIN group_users gm ON g.id = gm.group_id
+        LEFT JOIN users u ON gm.user_id = u.id
+        WHERE g.id = ?
+        GROUP BY g.id
+      `;
+      
+      db.query(getGroupQuery, [groupId], (err, groups) => {
+        if (err) {
+          console.error('Error fetching created group:', err);
+          return res.status(500).json({ error: 'Errore durante il recupero del gruppo creato' });
+        }
+        
+        res.status(201).json({ 
+          group: groups[0], 
+          message: 'Gruppo creato con successo' 
+        });
+      });
+    });
+  });
+});
+
+// Get all groups for a user
+app.get('/api/groups/user/:userId', (req, res) => {
+  const userId = req.params.userId;
+  
+  const query = `
+    SELECT g.*, COUNT(gm2.user_id) as participants, COALESCE(SUM(u.total_points), 0) as points
+    FROM groups g
+    JOIN group_users gm1 ON g.id = gm1.group_id AND gm1.user_id = ?
+    LEFT JOIN group_users gm2 ON g.id = gm2.group_id
+    LEFT JOIN users u ON gm2.user_id = u.id
+    GROUP BY g.id
+    ORDER BY g.created_at DESC
+  `;
+  
+  db.query(query, [userId], (err, groups) => {
+    if (err) {
+      console.error('Error fetching user groups:', err);
+      return res.status(500).json({ error: 'Errore durante il recupero dei gruppi dell\'utente' });
+    }
+    
+    // Format the created_at date for each group
+    const formattedGroups = groups.map(group => {
+      const date = new Date(group.created_at);
+      return {
+        ...group,
+        created_at: date.toLocaleDateString('it-IT')
+      };
+    });
+    
+    res.json({ groups: formattedGroups });
+  });
+});
+
+// Get a specific group by ID
+app.get('/api/groups/:groupId', (req, res) => {
+  const groupId = req.params.groupId;
+  
+  const groupQuery = `
+    SELECT g.*, COUNT(gm.user_id) as participants, COALESCE(SUM(u.total_points), 0) as points
+    FROM groups g
+    LEFT JOIN group_users gm ON g.id = gm.group_id
+    LEFT JOIN users u ON gm.user_id = u.id
+    WHERE g.id = ?
+    GROUP BY g.id
+  `;
+  
+  db.query(groupQuery, [groupId], (err, groups) => {
+    if (err) {
+      console.error('Error fetching group:', err);
+      return res.status(500).json({ error: 'Errore durante il recupero del gruppo' });
+    }
+    
+    if (groups.length === 0) {
+      return res.status(404).json({ error: 'Gruppo non trovato' });
+    }
+    
+    // Get group members
+    const membersQuery = `
+      SELECT u.id, u.username, u.avatar_url, u.total_points as points, gm.role
+      FROM group_users gm
+      JOIN users u ON gm.user_id = u.id
+      WHERE gm.group_id = ?
+      ORDER BY u.total_points DESC
+    `;
+    
+    db.query(membersQuery, [groupId], (err, members) => {
+      if (err) {
+        console.error('Error fetching group members:', err);
+        return res.status(500).json({ error: 'Errore durante il recupero dei membri del gruppo' });
+      }
+      
+      // Get group activities
+      const activitiesQuery = `
+        SELECT a.id, a.name, a.points, a.description, a.created_at as date
+        FROM activities a
+        WHERE a.group_id = ?
+        ORDER BY a.created_at DESC
+      `;
+      
+      db.query(activitiesQuery, [groupId], (err, activities) => {
+        if (err) {
+          console.error('Error fetching group activities:', err);
+          return res.status(500).json({ error: 'Errore durante il recupero delle attività del gruppo' });
+        }
+        
+        // Format dates for activities
+        const formattedActivities = activities.map(activity => {
+          const date = new Date(activity.date);
+          return {
+            ...activity,
+            date: date.toLocaleDateString('it-IT')
+          };
+        });
+        
+        // Return the group with members and activities
+        res.json({
+          group: {
+            ...groups[0],
+            participants: members,
+            activities: formattedActivities
+          }
+        });
+      });
+    });
+  });
+});
+
+// Join a group
+app.post('/api/groups/:groupId/join', (req, res) => {
+  const groupId = req.params.groupId;
+  const { user_id } = req.body;
+  
+  if (!user_id) {
+    return res.status(400).json({ error: 'ID utente richiesto' });
+  }
+  
+  // Check if the group exists
+  db.query('SELECT * FROM groups WHERE id = ?', [groupId], (err, groups) => {
+    if (err) {
+      console.error('Error checking group:', err);
+      return res.status(500).json({ error: 'Errore durante la verifica del gruppo' });
+    }
+    
+    if (groups.length === 0) {
+      return res.status(404).json({ error: 'Gruppo non trovato' });
+    }
+    
+    // Check if the user is already a member
+    db.query('SELECT * FROM group_users WHERE group_id = ? AND user_id = ?', [groupId, user_id], (err, members) => {
+      if (err) {
+        console.error('Error checking membership:', err);
+        return res.status(500).json({ error: 'Errore durante la verifica dell\'appartenenza al gruppo' });
+      }
+      
+      if (members.length > 0) {
+        return res.status(409).json({ error: 'L\'utente è già membro di questo gruppo' });
+      }
+      
+      // Add the user as a member
+      const insertQuery = 'INSERT INTO group_users (group_id, user_id, role) VALUES (?, ?, "member")';
+      db.query(insertQuery, [groupId, user_id], (err, result) => {
+        if (err) {
+          console.error('Error adding member to group:', err);
+          return res.status(500).json({ error: 'Errore durante l\'aggiunta del membro al gruppo' });
+        }
+        
+        res.json({ message: 'Utente aggiunto al gruppo con successo' });
+      });
+    });
+  });
+});
+
 // Start the server
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

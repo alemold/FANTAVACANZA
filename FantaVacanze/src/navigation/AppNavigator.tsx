@@ -8,6 +8,7 @@ import LoginScreen from '../screens/LoginScreen';
 import RegisterScreen from '../screens/RegisterScreen';
 import VacationGroupScreen from '../screens/VacationGroupScreen';
 import CreateVacationScreen from '../screens/CreateVacationScreen';
+import CreateGroupScreen from '../screens/CreateGroupScreen';
 import ActivityTrackingScreen from '../screens/ActivityTrackingScreen';
 import LeaderboardScreen from '../screens/LeaderboardScreen';
 import ProfileScreen from '../screens/ProfileScreen';
@@ -19,6 +20,7 @@ export type RootStackParamList = {
   Register: undefined;
   VacationGroup: { groupId: string };
   CreateVacation: undefined;
+  CreateGroup: undefined;
   ActivityTracking: { vacationId: string };
   Leaderboard: { groupId: string };
   Profile: undefined;
@@ -29,46 +31,49 @@ const Stack = createStackNavigator<RootStackParamList>();
 const AppNavigator = () => {
   return (
     <NavigationContainer>
-      <Stack.Navigator initialRouteName="Login">
+      <Stack.Navigator 
+        initialRouteName="Login"
+        screenOptions={{
+          headerShown: false, // Hide the default header for all screens
+          cardStyle: { backgroundColor: '#f5f5f5' }
+        }}
+      >
         <Stack.Screen 
           name="Login" 
           component={LoginScreen} 
-          options={{ headerShown: false }}
         />
         <Stack.Screen 
           name="Register" 
           component={RegisterScreen} 
-          options={{ title: 'Registrazione' }}
         />
         <Stack.Screen 
           name="Home" 
           component={HomeScreen} 
-          options={{ title: 'FantaVacanze' }}
         />
         <Stack.Screen 
           name="VacationGroup" 
           component={VacationGroupScreen} 
-          options={{ title: 'Gruppo Vacanza' }}
         />
         <Stack.Screen 
           name="CreateVacation" 
           component={CreateVacationScreen} 
-          options={{ title: 'Crea Vacanza' }}
         />
+        <Stack.Screen 
+          name="CreateGroup" 
+          component={CreateGroupScreen} 
+        />
+
         <Stack.Screen 
           name="ActivityTracking" 
           component={ActivityTrackingScreen} 
-          options={{ title: 'Attività' }}
         />
         <Stack.Screen 
           name="Leaderboard" 
           component={LeaderboardScreen} 
-          options={{ title: 'Classifica' }}
         />
         <Stack.Screen 
           name="Profile" 
           component={ProfileScreen} 
-          options={{ title: 'Profilo' }}
         />
       </Stack.Navigator>
     </NavigationContainer>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, Image, Alert } from 'react-native';
+import CustomHeader from '../components/CustomHeader';
 import { Text, Card, Button, Title, TextInput, Avatar, Divider, List, ActivityIndicator } from 'react-native-paper';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
@@ -21,6 +22,128 @@ interface UserData {
   avatar_url?: string;
   // Add other fields as needed
 }
+
+const styles = StyleSheet.create({
+  mainContainer: {
+    flex: 1,
+    backgroundColor: '#f5f5f5',
+  },
+  container: {
+    flex: 1,
+    backgroundColor: '#f5f5f5',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: '#757575',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorText: {
+    color: 'red',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  headerCard: {
+    margin: 16,
+    marginBottom: 8,
+  },
+  headerContent: {
+    alignItems: 'center',
+    padding: 16,
+  },
+  avatar: {
+    marginBottom: 16,
+  },
+  profileInfo: {
+    alignItems: 'center',
+    width: '100%',
+  },
+  name: {
+    fontSize: 22,
+    fontWeight: 'bold',
+  },
+  email: {
+    fontSize: 16,
+    color: '#757575',
+    marginBottom: 16,
+  },
+  editButton: {
+    marginTop: 8,
+  },
+  editForm: {
+    width: '100%',
+    marginTop: 8,
+  },
+  imageButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  imageButton: {
+    flex: 1,
+    marginHorizontal: 4,
+  },
+  input: {
+    marginBottom: 12,
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
+  button: {
+    flex: 1,
+    marginHorizontal: 4,
+  },
+  cancelButton: {
+    borderColor: '#757575',
+  },
+  statsCard: {
+    margin: 16,
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  statsTitle: {
+    fontSize: 18,
+    marginBottom: 16,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  statItem: {
+    alignItems: 'center',
+  },
+  statValue: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#2196F3',
+  },
+  statLabel: {
+    fontSize: 14,
+    color: '#757575',
+    marginTop: 4,
+  },
+  actionsCard: {
+    margin: 16,
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  logoutButton: {
+    marginTop: 8,
+  },
+});
 
 const ProfileScreen = ({ navigation }: Props) => {
   const [userData, setUserData] = useState<UserData | null>(null);
@@ -195,7 +318,9 @@ const ProfileScreen = ({ navigation }: Props) => {
   }
 
   return (
-    <ScrollView style={styles.container}>
+    <View style={styles.mainContainer}>
+      <CustomHeader title="Profilo" />
+      <ScrollView style={styles.container}>
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
       
       <Card style={styles.headerCard}>
@@ -337,125 +462,8 @@ const ProfileScreen = ({ navigation }: Props) => {
         </Card.Content>
       </Card>
     </ScrollView>
+    </View>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 16,
-    color: '#757575',
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  errorText: {
-    color: 'red',
-    marginBottom: 10,
-    textAlign: 'center',
-  },
-  headerCard: {
-    margin: 16,
-    marginBottom: 8,
-  },
-  headerContent: {
-    alignItems: 'center',
-    padding: 16,
-  },
-  avatar: {
-    marginBottom: 16,
-  },
-  profileInfo: {
-    alignItems: 'center',
-    width: '100%',
-  },
-  name: {
-    fontSize: 22,
-    fontWeight: 'bold',
-  },
-  email: {
-    fontSize: 16,
-    color: '#757575',
-    marginBottom: 16,
-  },
-  editButton: {
-    marginTop: 8,
-  },
-  editForm: {
-    width: '100%',
-    marginTop: 8,
-  },
-  imageButtonsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  imageButton: {
-    flex: 1,
-    marginHorizontal: 4,
-  },
-  input: {
-    marginBottom: 12,
-  },
-  buttonRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 8,
-  },
-  button: {
-    flex: 1,
-    marginHorizontal: 4,
-  },
-  cancelButton: {
-    borderColor: '#757575',
-  },
-  statsCard: {
-    margin: 16,
-    marginTop: 8,
-    marginBottom: 8,
-  },
-  statsTitle: {
-    fontSize: 18,
-    marginBottom: 16,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-  },
-  statItem: {
-    alignItems: 'center',
-  },
-  statValue: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#2196F3',
-  },
-  statLabel: {
-    fontSize: 14,
-    color: '#757575',
-    marginTop: 4,
-  },
-  actionsCard: {
-    margin: 16,
-    marginTop: 8,
-    marginBottom: 16,
-  },
-  logoutButton: {
-    marginTop: 8,
-  },
-});
 
 export default ProfileScreen;

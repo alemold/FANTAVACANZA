@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
-import { Text, Card, Button, FAB, Title, Paragraph } from 'react-native-paper';
+import { View, StyleSheet, FlatList, TouchableOpacity, Modal, Dimensions } from 'react-native';
+import CustomHeader from '../components/CustomHeader';
+import { Text, Card, Button, FAB, Title, Paragraph, Portal, TextInput, ActivityIndicator } from 'react-native-paper';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
+import { groupService } from '../services/api';
 
 type HomeScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Home'>;
 
@@ -10,42 +12,85 @@ type Props = {
   navigation: HomeScreenNavigationProp;
 };
 
-// Mock data for vacation groups
-const mockVacationGroups = [
-  {
-    id: '1',
-    name: 'Vacanza in Sardegna',
-    location: 'Sardegna, Italia',
-    startDate: '15/07/2023',
-    endDate: '22/07/2023',
-    participants: 5,
-    points: 120,
-  },
-  {
-    id: '2',
-    name: 'Weekend a Roma',
-    location: 'Roma, Italia',
-    startDate: '10/08/2023',
-    endDate: '13/08/2023',
-    participants: 3,
-    points: 75,
-  },
-];
+// Group data interface
+interface GroupData {
+  id: string;
+  name: string;
+  participants: number;
+  points: number;
+  created_at: string;
+}
 
 const HomeScreen = ({ navigation }: Props) => {
-  const [vacationGroups, setVacationGroups] = useState(mockVacationGroups);
+  const [groups, setGroups] = useState<GroupData[]>([]);
   const [loading, setLoading] = useState(false);
+  const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [groupName, setGroupName] = useState('');
+  const [error, setError] = useState('');
+  const [createLoading, setCreateLoading] = useState(false);
 
-  // In a real app, you would fetch the vacation groups from your MySQL database
+  // Fetch groups from the database when component mounts
   useEffect(() => {
-    // Simulating data fetching
-    setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-    }, 1000);
+    const fetchGroups = async () => {
+      try {
+        setLoading(true);
+        const response = await groupService.getUserGroups();
+        if (response && response.groups) {
+          setGroups(response.groups);
+        }
+      } catch (err) {
+        console.error('Error fetching groups:', err);
+        setError('Errore nel caricamento dei gruppi');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchGroups();
   }, []);
 
-  const renderVacationGroup = ({ item }: { item: typeof mockVacationGroups[0] }) => (
+  const handleCreateGroup = async () => {
+    // Reset error state
+    setError('');
+    
+    // Basic validation
+    if (!groupName) {
+      setError('Per favore, inserisci il nome del gruppo');
+      return;
+    }
+
+    try {
+      setCreateLoading(true);
+      
+      // Create group in the database via our API service
+      const result = await groupService.createGroup(groupName);
+      
+      // Close the modal and reset form
+      setShowCreateGroupModal(false);
+      setGroupName('');
+      
+      // Refresh groups list by fetching the updated list
+      const response = await groupService.getUserGroups();
+      if (response && response.groups) {
+        setGroups(response.groups);
+      }
+      
+      setCreateLoading(false);
+      
+    } catch (err) {
+      setCreateLoading(false);
+      setError('Errore durante la creazione del gruppo. Riprova più tardi.');
+      console.error(err);
+    }
+  };
+
+  const openCreateGroupFlow = () => {
+    // First show the confirmation modal
+    setShowConfirmModal(true);
+  };
+
+  const renderGroup = ({ item }: { item: GroupData }) => (
     <TouchableOpacity 
       onPress={() => navigation.navigate('VacationGroup', { groupId: item.id })}
       style={styles.cardContainer}
@@ -53,10 +98,9 @@ const HomeScreen = ({ navigation }: Props) => {
       <Card style={styles.card}>
         <Card.Content>
           <Title>{item.name}</Title>
-          <Paragraph style={styles.location}>{item.location}</Paragraph>
           <View style={styles.detailsRow}>
-            <Text style={styles.dates}>{item.startDate} - {item.endDate}</Text>
             <Text style={styles.participants}>Partecipanti: {item.participants}</Text>
+            <Text style={styles.date}>Creato il: {item.created_at}</Text>
           </View>
           <View style={styles.pointsContainer}>
             <Text style={styles.points}>{item.points} punti</Text>
@@ -70,45 +114,122 @@ const HomeScreen = ({ navigation }: Props) => {
     </TouchableOpacity>
   );
 
+  const { height } = Dimensions.get('window');
+
   return (
     <View style={styles.container}>
+      <CustomHeader />
       <View style={styles.header}>
-        <Title style={styles.headerTitle}>Le tue Vacanze</Title>
+        <Title style={styles.headerTitle}>I tuoi Gruppi</Title>
       </View>
       
-      {vacationGroups.length > 0 ? (
+      {groups.length > 0 ? (
         <FlatList
-          data={vacationGroups}
-          renderItem={renderVacationGroup}
+          data={groups}
+          renderItem={renderGroup}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContainer}
         />
       ) : (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>Non hai ancora gruppi vacanza</Text>
           <Button 
             mode="contained" 
-            onPress={() => navigation.navigate('CreateVacation')}
-            style={styles.createButton}
+            onPress={openCreateGroupFlow}
+            style={styles.createGroupButton}
+            labelStyle={styles.createGroupButtonLabel}
           >
-            Crea il tuo primo gruppo
+            CREA UN GRUPPO
+          </Button>
+          
+          <Button 
+            mode="outlined" 
+            onPress={() => console.log('Unisciti a un gruppo')}
+            style={styles.joinGroupButton}
+          >
+            Unisciti a un gruppo
           </Button>
         </View>
       )}
       
-      <FAB
-        style={styles.fab}
-        icon="plus"
-        onPress={() => navigation.navigate('CreateVacation')}
-        label="Nuova Vacanza"
-      />
+      {groups.length > 0 && (
+        <FAB
+          style={styles.fab}
+          icon="plus"
+          onPress={openCreateGroupFlow}
+          label="Nuovo Gruppo"
+        />
+      )}
       
-      <TouchableOpacity 
-        style={styles.profileButton}
-        onPress={() => navigation.navigate('Profile')}
-      >
-        <Text style={styles.profileButtonText}>Profilo</Text>
-      </TouchableOpacity>
+      {/* Profile button moved to CustomHeader */}
+
+      {/* Confirmation Modal */}
+      <Portal>
+        <Modal
+          visible={showConfirmModal}
+          onDismiss={() => setShowConfirmModal(false)}
+          style={styles.modalContainer}
+          animationType="slide"
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Title style={styles.modalTitle}>Nuovo Gruppo?</Title>
+              <Paragraph style={styles.modalDescription}>
+                Crea un gruppo per ogni vacanza e sfida i tuoi amici a completare attività divertenti!
+                Guadagna punti, scala la classifica e diventa il campione della vacanza.
+              </Paragraph>
+              <Button 
+                mode="contained" 
+                onPress={() => {
+                  setShowConfirmModal(false);
+                  navigation.navigate('CreateGroup');
+                }}
+                style={styles.modalButton}
+                labelStyle={styles.modalButtonLabel}
+              >
+                Crea Gruppo
+              </Button>
+            </View>
+          </View>
+        </Modal>
+      </Portal>
+
+      {/* Create Group Form Modal */}
+      <Portal>
+        <Modal
+          visible={showCreateGroupModal}
+          onDismiss={() => setShowCreateGroupModal(false)}
+          style={styles.modalContainer}
+          animationType="slide"
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Title style={styles.modalTitle}>Crea un Nuovo Gruppo</Title>
+              <Text style={styles.modalSubtitle}>Inserisci il nome del tuo gruppo vacanza</Text>
+              
+              <TextInput
+                label="Nome del Gruppo *"
+                value={groupName}
+                onChangeText={setGroupName}
+                mode="outlined"
+                style={styles.input}
+              />
+              
+              {error ? <Text style={styles.errorText}>{error}</Text> : null}
+              
+              <Button
+                mode="contained"
+                onPress={handleCreateGroup}
+                loading={createLoading}
+                disabled={createLoading}
+                style={styles.createButton}
+                labelStyle={styles.createButtonLabel}
+              >
+                Crea Gruppo
+              </Button>
+            </View>
+          </View>
+        </Modal>
+      </Portal>
     </View>
   );
 };
@@ -135,16 +256,12 @@ const styles = StyleSheet.create({
   card: {
     elevation: 4,
   },
-  location: {
-    color: '#757575',
-    marginBottom: 8,
-  },
   detailsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginTop: 8,
   },
-  dates: {
+  date: {
     fontSize: 14,
     color: '#555',
   },
@@ -167,13 +284,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
   },
-  emptyText: {
-    fontSize: 18,
-    color: '#757575',
+  createGroupButton: {
     marginBottom: 20,
+    paddingVertical: 10,
+    width: '80%',
   },
-  createButton: {
-    marginTop: 10,
+  createGroupButtonLabel: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  joinGroupButton: {
+    width: '60%',
   },
   fab: {
     position: 'absolute',
@@ -182,18 +303,67 @@ const styles = StyleSheet.create({
     bottom: 0,
     backgroundColor: '#2196F3',
   },
-  profileButton: {
-    position: 'absolute',
-    top: 16,
-    right: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
+  /* Profile button styles moved to CustomHeader */
+  // Modal styles
+  modalContainer: {
+    margin: 0,
+    justifyContent: 'flex-end',
   },
-  profileButtonText: {
-    color: 'white',
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    padding: 20,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    height: Dimensions.get('window').height / 2,
+  },
+  modalTitle: {
+    fontSize: 22,
     fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: '#757575',
+    marginTop: 8,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  modalDescription: {
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 20,
+    lineHeight: 22,
+  },
+  modalButton: {
+    marginTop: 10,
+    alignSelf: 'center',
+    width: '40%',
+  },
+  modalButtonLabel: {
+    fontSize: 14,
+  },
+  input: {
+    marginBottom: 15,
+  },
+  createButton: {
+    marginTop: 10,
+    paddingVertical: 6,
+    alignSelf: 'center',
+    width: '60%',
+  },
+  createButtonLabel: {
+    fontSize: 14,
+  },
+  errorText: {
+    color: 'red',
+    marginBottom: 10,
+    textAlign: 'center',
   },
 });
 

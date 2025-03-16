@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, Image, KeyboardAvoidingView, Platform, TouchableOpacity } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { TextInput, Button, Text, Title, Divider, Snackbar } from 'react-native-paper';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
