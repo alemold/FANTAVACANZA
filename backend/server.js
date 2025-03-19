@@ -6,6 +6,10 @@ const bodyParser = require('body-parser');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const dotenv = require('dotenv');
+
+// Load environment variables from .env file
+dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3001; // Changed default port to 3001 to avoid conflicts
@@ -52,10 +56,11 @@ const upload = multer({
 
 // Database connection
 const db = mysql.createConnection({
-  host: '127.0.0.1',
-  user: 'root',
-  password: '',
-  database: 'fanta-pag'
+  host: process.env.DB_HOST,
+  port: process.env.DB_PORT,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME
 });
 
 // Connect to MySQL
@@ -348,7 +353,7 @@ app.post('/api/groups', (req, res) => {
   }
   
   // Insert the new group into the database
-  const insertGroupQuery = 'INSERT INTO groups (name, created_by) VALUES (?, ?)';
+  const insertGroupQuery = 'INSERT INTO game_groups (name, created_by) VALUES (?, ?)';
   db.query(insertGroupQuery, [name, user_id], (err, result) => {
     if (err) {
       console.error('Error creating group:', err);
@@ -368,7 +373,7 @@ app.post('/api/groups', (req, res) => {
       // Return the newly created group
       const getGroupQuery = `
         SELECT g.*, COUNT(gm.user_id) as participants, COALESCE(SUM(u.total_points), 0) as points
-        FROM groups g
+        FROM game_groups g
         LEFT JOIN group_users gm ON g.id = gm.group_id
         LEFT JOIN users u ON gm.user_id = u.id
         WHERE g.id = ?
@@ -396,7 +401,7 @@ app.get('/api/groups/user/:userId', (req, res) => {
   
   const query = `
     SELECT g.*, COUNT(gm2.user_id) as participants, COALESCE(SUM(u.total_points), 0) as points
-    FROM groups g
+    FROM game_groups g
     JOIN group_users gm1 ON g.id = gm1.group_id AND gm1.user_id = ?
     LEFT JOIN group_users gm2 ON g.id = gm2.group_id
     LEFT JOIN users u ON gm2.user_id = u.id
@@ -429,7 +434,7 @@ app.get('/api/groups/:groupId', (req, res) => {
   
   const groupQuery = `
     SELECT g.*, COUNT(gm.user_id) as participants, COALESCE(SUM(u.total_points), 0) as points
-    FROM groups g
+    FROM game_groups g
     LEFT JOIN group_users gm ON g.id = gm.group_id
     LEFT JOIN users u ON gm.user_id = u.id
     WHERE g.id = ?
@@ -497,7 +502,6 @@ app.get('/api/groups/:groupId', (req, res) => {
   });
 });
 
-// Join a group
 app.post('/api/groups/:groupId/join', (req, res) => {
   const groupId = req.params.groupId;
   const { user_id } = req.body;
@@ -506,8 +510,7 @@ app.post('/api/groups/:groupId/join', (req, res) => {
     return res.status(400).json({ error: 'ID utente richiesto' });
   }
   
-  // Check if the group exists
-  db.query('SELECT * FROM groups WHERE id = ?', [groupId], (err, groups) => {
+  db.query('SELECT * FROM game_groups WHERE id = ?', [groupId], (err, groups) => {
     if (err) {
       console.error('Error checking group:', err);
       return res.status(500).json({ error: 'Errore durante la verifica del gruppo' });
@@ -517,7 +520,6 @@ app.post('/api/groups/:groupId/join', (req, res) => {
       return res.status(404).json({ error: 'Gruppo non trovato' });
     }
     
-    // Check if the user is already a member
     db.query('SELECT * FROM group_users WHERE group_id = ? AND user_id = ?', [groupId, user_id], (err, members) => {
       if (err) {
         console.error('Error checking membership:', err);
@@ -528,7 +530,6 @@ app.post('/api/groups/:groupId/join', (req, res) => {
         return res.status(409).json({ error: 'L\'utente è già membro di questo gruppo' });
       }
       
-      // Add the user as a member
       const insertQuery = 'INSERT INTO group_users (group_id, user_id, role) VALUES (?, ?, "member")';
       db.query(insertQuery, [groupId, user_id], (err, result) => {
         if (err) {

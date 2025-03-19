@@ -35,7 +35,7 @@ const AppNavigator = () => {
         initialRouteName="Login"
         screenOptions={{
           headerShown: false, // Hide the default header for all screens
-          cardStyle: { backgroundColor: '#f5f5f5' }
+          cardStyle: { backgroundColor: '#e8e1f0' } // Updated to match the new background color
         }}
       >
         <Stack.Screen 

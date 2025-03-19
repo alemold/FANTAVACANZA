@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, FlatList, TouchableOpacity, Modal, Dimensions } from 'react-native';
+import { View, StyleSheet, FlatList, TouchableOpacity, Modal, Dimensions, Animated } from 'react-native';
 import CustomHeader from '../components/CustomHeader';
 import { Text, Card, Button, FAB, Title, Paragraph, Portal, TextInput, ActivityIndicator } from 'react-native-paper';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -29,6 +29,10 @@ const HomeScreen = ({ navigation }: Props) => {
   const [groupName, setGroupName] = useState('');
   const [error, setError] = useState('');
   const [createLoading, setCreateLoading] = useState(false);
+  
+  // Animation values for modals
+  const confirmModalAnim = React.useRef(new Animated.Value(Dimensions.get('window').height)).current;
+  const createModalAnim = React.useRef(new Animated.Value(Dimensions.get('window').height)).current;
 
   // Fetch groups from the database when component mounts
   useEffect(() => {
@@ -85,9 +89,30 @@ const HomeScreen = ({ navigation }: Props) => {
     }
   };
 
+  // Function to show the create group modal with animation
+  const showCreateGroupModalWithAnimation = () => {
+    setShowCreateGroupModal(true);
+    
+    // Reset the animation value and animate up
+    createModalAnim.setValue(Dimensions.get('window').height);
+    Animated.timing(createModalAnim, {
+      toValue: 0,
+      duration: 300,
+      useNativeDriver: true
+    }).start();
+  };
+  
   const openCreateGroupFlow = () => {
     // First show the confirmation modal
     setShowConfirmModal(true);
+    
+    // Reset the animation value and animate up
+    confirmModalAnim.setValue(Dimensions.get('window').height);
+    Animated.timing(confirmModalAnim, {
+      toValue: 0,
+      duration: 300,
+      useNativeDriver: true
+    }).start();
   };
 
   const renderGroup = ({ item }: { item: GroupData }) => (
@@ -119,9 +144,6 @@ const HomeScreen = ({ navigation }: Props) => {
   return (
     <View style={styles.container}>
       <CustomHeader />
-      <View style={styles.header}>
-        <Title style={styles.headerTitle}>I tuoi Gruppi</Title>
-      </View>
       
       {groups.length > 0 ? (
         <FlatList
@@ -166,12 +188,23 @@ const HomeScreen = ({ navigation }: Props) => {
       <Portal>
         <Modal
           visible={showConfirmModal}
-          onDismiss={() => setShowConfirmModal(false)}
+          onDismiss={() => {
+            // Animate the modal sliding down before closing
+            Animated.timing(confirmModalAnim, {
+              toValue: Dimensions.get('window').height,
+              duration: 300,
+              useNativeDriver: true
+            }).start(() => setShowConfirmModal(false));
+          }}
           style={styles.modalContainer}
-          animationType="slide"
+          animationType="none"
+          transparent={true}
         >
           <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
+
+            <Animated.View 
+              style={[styles.modalContent, {transform: [{translateY: confirmModalAnim}]}]}>
+
               <Title style={styles.modalTitle}>Nuovo Gruppo?</Title>
               <Paragraph style={styles.modalDescription}>
                 Crea un gruppo per ogni vacanza e sfida i tuoi amici a completare attività divertenti!
@@ -180,15 +213,22 @@ const HomeScreen = ({ navigation }: Props) => {
               <Button 
                 mode="contained" 
                 onPress={() => {
-                  setShowConfirmModal(false);
-                  navigation.navigate('CreateGroup');
+                  // Animate the modal sliding down before navigating
+                  Animated.timing(confirmModalAnim, {
+                    toValue: Dimensions.get('window').height,
+                    duration: 300,
+                    useNativeDriver: true
+                  }).start(() => {
+                    setShowConfirmModal(false);
+                    navigation.navigate('CreateGroup');
+                  });
                 }}
                 style={styles.modalButton}
                 labelStyle={styles.modalButtonLabel}
               >
                 Crea Gruppo
               </Button>
-            </View>
+            </Animated.View>
           </View>
         </Modal>
       </Portal>
@@ -197,12 +237,22 @@ const HomeScreen = ({ navigation }: Props) => {
       <Portal>
         <Modal
           visible={showCreateGroupModal}
-          onDismiss={() => setShowCreateGroupModal(false)}
+          onDismiss={() => {
+            // Animate the modal sliding down before closing
+            Animated.timing(createModalAnim, {
+              toValue: Dimensions.get('window').height,
+              duration: 300,
+              useNativeDriver: true
+            }).start(() => setShowCreateGroupModal(false));
+          }}
           style={styles.modalContainer}
-          animationType="slide"
+          animationType="none"
+          transparent={true}
         >
           <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
+
+            <Animated.View 
+              style={[styles.modalContent, {transform: [{translateY: createModalAnim}]}]}>
               <Title style={styles.modalTitle}>Crea un Nuovo Gruppo</Title>
               <Text style={styles.modalSubtitle}>Inserisci il nome del tuo gruppo vacanza</Text>
               
@@ -226,7 +276,7 @@ const HomeScreen = ({ navigation }: Props) => {
               >
                 Crea Gruppo
               </Button>
-            </View>
+            </Animated.View>
           </View>
         </Modal>
       </Portal>
@@ -237,15 +287,7 @@ const HomeScreen = ({ navigation }: Props) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
-  header: {
-    padding: 16,
-    backgroundColor: '#2196F3',
-  },
-  headerTitle: {
-    color: 'white',
-    fontSize: 24,
+    backgroundColor: '#e8e1f0', // Lighter shade of purple to match the header
   },
   listContainer: {
     padding: 16,
@@ -320,6 +362,24 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     height: Dimensions.get('window').height / 2,
+  },
+  modalHeader: {
+    position: 'absolute',
+    top: 10,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+  },
+  closeButton: {
+    backgroundColor: 'white',
+    borderRadius: 30,
+    margin: 0,
+    padding: 0,
+    elevation: 5,
+    width: 100,
   },
   modalTitle: {
     fontSize: 22,
