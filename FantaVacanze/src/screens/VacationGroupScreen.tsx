@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, FlatList } from 'react-native';
+import { View, StyleSheet, ScrollView, FlatList, ActivityIndicator } from 'react-native';
 import CustomHeader from '../components/CustomHeader';
-import { Text, Card, Button, Title, Paragraph, Avatar, List, Divider } from 'react-native-paper';
+import { Text, Card, Button, Title, Paragraph, Avatar, List, Divider, IconButton } from 'react-native-paper';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList } from '../navigation/AppNavigator';
+import { groupService } from '../services/api';
 
 type VacationGroupScreenNavigationProp = StackNavigationProp<RootStackParamList, 'VacationGroup'>;
 type VacationGroupScreenRouteProp = RouteProp<RootStackParamList, 'VacationGroup'>;
@@ -14,98 +15,186 @@ type Props = {
   route: VacationGroupScreenRouteProp;
 };
 
-// Mock data for a vacation group
-const mockVacationGroup = {
-  id: '1',
-  name: 'Vacanza in Sardegna',
-  location: 'Sardegna, Italia',
-  startDate: '15/07/2023',
-  endDate: '22/07/2023',
-  description: 'Una settimana di relax e divertimento in Sardegna con gli amici!',
-  participants: [
-    { id: '1', name: 'Marco Rossi', points: 120, avatar: null },
-    { id: '2', name: 'Laura Bianchi', points: 95, avatar: null },
-    { id: '3', name: 'Giulia Verdi', points: 150, avatar: null },
-    { id: '4', name: 'Paolo Neri', points: 80, avatar: null },
-    { id: '5', name: 'Anna Gialli', points: 110, avatar: null },
-  ],
-  activities: [
-    { id: '1', name: 'Escursione in barca', points: 30, date: '16/07/2023' },
-    { id: '2', name: 'Snorkeling', points: 20, date: '17/07/2023' },
-    { id: '3', name: 'Trekking', points: 25, date: '18/07/2023' },
-    { id: '4', name: 'Beach volley', points: 15, date: '19/07/2023' },
-    { id: '5', name: 'Serata karaoke', points: 10, date: '20/07/2023' },
-  ],
-};
+// Initial structure for a vacation group
+interface Participant {
+  id: string;
+  name: string;
+  points: number;
+  avatar: string | null;
+  isAdmin: boolean;
+}
+
+interface Activity {
+  id: string;
+  name: string;
+  points: number;
+  date: string;
+}
+
+interface VacationGroup {
+  id: string;
+  name: string;
+  location: string;
+  startDate: string;
+  endDate: string;
+  description: string;
+  participants: Participant[];
+  activities: Activity[];
+}
+
+// Default activities for now (these would also come from the database in a complete implementation)
+const defaultActivities = [
+  { id: '1', name: 'Escursione in barca', points: 30, date: '16/07/2023' },
+  { id: '2', name: 'Snorkeling', points: 20, date: '17/07/2023' },
+  { id: '3', name: 'Trekking', points: 25, date: '18/07/2023' },
+  { id: '4', name: 'Beach volley', points: 15, date: '19/07/2023' },
+  { id: '5', name: 'Serata karaoke', points: 10, date: '20/07/2023' },
+];
 
 const VacationGroupScreen = ({ navigation, route }: Props) => {
   const { groupId } = route.params;
-  const [vacationGroup, setVacationGroup] = useState(mockVacationGroup);
-  const [loading, setLoading] = useState(false);
+  const [vacationGroup, setVacationGroup] = useState<VacationGroup | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  // In a real app, you would fetch the vacation group details from your MySQL database
+  // Fetch the vacation group details and participants from the database
   useEffect(() => {
-    // Simulating data fetching
-    setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      // Here you would fetch the actual vacation group data based on groupId
-      // For now, we're using mock data
-    }, 1000);
+    const fetchGroupData = async () => {
+      try {
+        setLoading(true);
+        setError('');
+        
+        // Fetch group details
+        const groupResponse = await groupService.getGroupById(groupId);
+        
+        // Fetch participants
+        const participantsResponse = await groupService.getGroupParticipants(groupId);
+        
+        if (groupResponse.group && participantsResponse.participants) {
+          // Map the participants data to match our component's expected format
+          const mappedParticipants = participantsResponse.participants.map((participant: any) => ({
+            id: participant.user_id.toString(),
+            name: participant.username || `User ${participant.user_id}`,
+            points: participant.points || 0,
+            avatar: participant.avatar_url,
+            isAdmin: participant.role === 'admin'
+          }));
+          
+          // Create the vacation group object with the fetched data
+          setVacationGroup({
+            id: groupResponse.group.id,
+            name: groupResponse.group.name,
+            location: 'Sardegna, Italia', // This would come from the database in a complete implementation
+            startDate: '15/07/2023', // This would come from the database in a complete implementation
+            endDate: '22/07/2023', // This would come from the database in a complete implementation
+            description: 'Una settimana di relax e divertimento in Sardegna con gli amici!', // This would come from the database
+            participants: mappedParticipants,
+            activities: defaultActivities // Using default activities for now
+          });
+        } else {
+          setError('Errore nel caricamento dei dati del gruppo');
+        }
+      } catch (err) {
+        console.error('Error fetching group data:', err);
+        setError('Errore nel caricamento dei dati del gruppo');
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchGroupData();
   }, [groupId]);
 
-  const renderParticipant = ({ item }: { item: typeof vacationGroup.participants[0] }) => (
-    <List.Item
-      title={item.name}
-      description={`${item.points} punti`}
-      left={props => (
-        <Avatar.Text 
-          {...props} 
-          size={40} 
-          label={item.name.split(' ').map(n => n[0]).join('')} 
-        />
-      )}
-      right={props => (
-        <Text {...props} style={styles.participantRank}>
-          {vacationGroup.participants.sort((a, b) => b.points - a.points).findIndex(p => p.id === item.id) + 1}°
-        </Text>
-      )}
-    />
-  );
+  const renderParticipant = ({ item }: { item: Participant }) => {
+    if (!vacationGroup) return null;
+    
+    return (
+      <List.Item
+        title={item.name}
+        description={`${item.points} punti`}
+        left={props => (
+          <Avatar.Text 
+            {...props} 
+            size={40} 
+            label={item.name.split(' ').map(n => n[0]).join('')} 
+          />
+        )}
+        right={props => (
+          <Text {...props} style={styles.participantRank}>
+            {vacationGroup.participants.sort((a, b) => b.points - a.points).findIndex(p => p.id === item.id) + 1}°
+          </Text>
+        )}
+      />
+    );
+  };
 
-  const renderActivity = ({ item }: { item: typeof vacationGroup.activities[0] }) => (
-    <Card style={styles.activityCard}>
-      <Card.Content>
-        <Title style={styles.activityTitle}>{item.name}</Title>
-        <Paragraph>Data: {item.date}</Paragraph>
-        <Paragraph style={styles.activityPoints}>{item.points} punti</Paragraph>
-      </Card.Content>
-    </Card>
-  );
+  const renderActivity = ({ item }: { item: Activity }) => {
+    if (!vacationGroup) return null;
+    
+    return (
+      <Card style={styles.activityCard}>
+        <Card.Content>
+          <Title style={styles.activityTitle}>{item.name}</Title>
+          <Paragraph>Data: {item.date}</Paragraph>
+          <Paragraph style={styles.activityPoints}>{item.points} punti</Paragraph>
+        </Card.Content>
+      </Card>
+    );
+  };
+
+  // Show loading indicator while fetching data
+  if (loading) {
+    return (
+      <View style={[styles.containerWrapper, styles.loadingContainer]}>
+        <ActivityIndicator size="large" color="#2196F3" />
+        <Text style={styles.loadingText}>Caricamento dati del gruppo...</Text>
+      </View>
+    );
+  }
+
+  // Show error message if there was an error
+  if (error || !vacationGroup) {
+    return (
+      <View style={[styles.containerWrapper, styles.errorContainer]}>
+        <Text style={styles.errorText}>{error || 'Errore nel caricamento dei dati'}</Text>
+        <Button mode="contained" onPress={() => navigation.goBack()}>Torna indietro</Button>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.containerWrapper}>
-      <CustomHeader title={vacationGroup.name} />
+      <CustomHeader 
+        title={vacationGroup.name} 
+        isGroupScreen={true} 
+        groupId={groupId} 
+        groupName={vacationGroup.name} 
+      />
       <ScrollView style={styles.container}>
-      <Card style={styles.headerCard}>
-        <Card.Content>
-          <Title style={styles.title}>{vacationGroup.name}</Title>
-          <Paragraph style={styles.location}>{vacationGroup.location}</Paragraph>
-          <Paragraph style={styles.dates}>
-            {vacationGroup.startDate} - {vacationGroup.endDate}
-          </Paragraph>
-          <Paragraph style={styles.description}>{vacationGroup.description}</Paragraph>
-        </Card.Content>
-      </Card>
-
       <View style={styles.section}>
         <Title style={styles.sectionTitle}>Partecipanti</Title>
-        <FlatList
-          data={vacationGroup.participants.sort((a, b) => b.points - a.points)}
-          renderItem={renderParticipant}
-          keyExtractor={(item) => item.id}
-          scrollEnabled={false}
-        />
+        {vacationGroup && vacationGroup.participants.length === 1 && vacationGroup.participants[0].isAdmin ? (
+          <Card style={styles.inviteCard}>
+            <Card.Content style={styles.inviteCardContent}>
+              <Text style={styles.inviteText}>Invita i tuoi amici al tuo gruppo per iniziare a sfidarvi✌️</Text>
+              <Button 
+                mode="contained" 
+                icon="account-plus"
+                onPress={() => console.log('Invita amici')}
+                style={styles.inviteButton}
+              >
+                + invita gli amici
+              </Button>
+            </Card.Content>
+          </Card>
+        ) : (
+          <FlatList
+            data={vacationGroup.participants.sort((a, b) => b.points - a.points)}
+            renderItem={renderParticipant}
+            keyExtractor={(item) => item.id}
+            scrollEnabled={false}
+          />
+        )}
       </View>
 
       <Divider style={styles.divider} />
@@ -113,7 +202,7 @@ const VacationGroupScreen = ({ navigation, route }: Props) => {
       <View style={styles.section}>
         <Title style={styles.sectionTitle}>Attività</Title>
         <FlatList
-          data={vacationGroup.activities}
+          data={vacationGroup?.activities || []}
           renderItem={renderActivity}
           keyExtractor={(item) => item.id}
           horizontal
@@ -152,26 +241,25 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f5f5f5',
   },
-  headerCard: {
-    margin: 16,
-    elevation: 4,
+  loadingContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-  },
-  location: {
+  loadingText: {
+    marginTop: 10,
     fontSize: 16,
     color: '#757575',
-    marginBottom: 4,
   },
-  dates: {
-    fontSize: 14,
-    color: '#555',
-    marginBottom: 8,
+  errorContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
   },
-  description: {
-    marginTop: 8,
+  errorText: {
+    color: 'red',
+    marginBottom: 20,
+    textAlign: 'center',
+    fontSize: 16,
   },
   section: {
     marginHorizontal: 16,
@@ -214,6 +302,25 @@ const styles = StyleSheet.create({
   },
   button: {
     flex: 0.48,
+  },
+  inviteCard: {
+    marginVertical: 16,
+    backgroundColor: '#f0f8ff',
+    elevation: 2,
+  },
+  inviteCardContent: {
+    alignItems: 'center',
+    padding: 16,
+  },
+  inviteText: {
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 16,
+    color: '#333',
+  },
+  inviteButton: {
+    marginTop: 8,
+    paddingHorizontal: 16,
   },
 });
 

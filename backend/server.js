@@ -342,6 +342,55 @@ app.post('/api/users/:id/upload-avatar', upload.single('avatar'), (req, res) => 
   });
 });
 
+// Challenge Routes
+
+// Get all challenge categories with their challenges
+app.get('/api/challenges/categories', (req, res) => {
+  // Query to get all challenge categories
+  const categoriesQuery = 'SELECT * FROM challenge_categories ORDER BY name';
+  
+  db.query(categoriesQuery, (err, categories) => {
+    if (err) {
+      console.error('Error fetching challenge categories:', err);
+      return res.status(500).json({ error: 'Errore durante il recupero delle categorie di sfide' });
+    }
+    
+    // Query to get all challenges with proper fields
+    const challengesQuery = `
+      SELECT 
+        id, 
+        category_id, 
+        description, 
+        points, 
+        status, 
+        is_active 
+      FROM challenges 
+      WHERE is_active = 1
+    `;
+    
+    db.query(challengesQuery, (err, challenges) => {
+      if (err) {
+        console.error('Error fetching challenges:', err);
+        return res.status(500).json({ error: 'Errore durante il recupero delle sfide' });
+      }
+      
+      // Group challenges by category
+      const categoriesWithChallenges = categories.map(category => {
+        const categoryChallenges = challenges.filter(challenge => 
+          challenge.category_id === category.id
+        );
+        
+        return {
+          ...category,
+          challenges: categoryChallenges
+        };
+      });
+      
+      res.json({ categories: categoriesWithChallenges });
+    });
+  });
+});
+
 // Group Routes
 
 // Create a new group
@@ -466,12 +515,13 @@ app.get('/api/groups/:groupId', (req, res) => {
         return res.status(500).json({ error: 'Errore durante il recupero dei membri del gruppo' });
       }
       
-      // Get group activities
+      // Get group challenges as activities
       const activitiesQuery = `
-        SELECT a.id, a.name, a.points, a.description, a.created_at as date
-        FROM activities a
-        WHERE a.group_id = ?
-        ORDER BY a.created_at DESC
+        SELECT c.id, c.description as name, c.points, c.status, c.description
+        FROM challenges c
+        JOIN group_challenges gc ON c.id = gc.challenge_id
+        WHERE gc.group_id = ?
+        ORDER BY gc.id DESC
       `;
       
       db.query(activitiesQuery, [groupId], (err, activities) => {
@@ -488,6 +538,11 @@ app.get('/api/groups/:groupId', (req, res) => {
             date: date.toLocaleDateString('it-IT')
           };
         });
+        
+        // If no activities found, use an empty array
+        if (formattedActivities.length === 0) {
+          console.log('No activities found for group, using empty array');
+        }
         
         // Return the group with members and activities
         res.json({
@@ -539,6 +594,39 @@ app.post('/api/groups/:groupId/join', (req, res) => {
         
         res.json({ message: 'Utente aggiunto al gruppo con successo' });
       });
+    });
+  });
+});
+
+// Save selected challenges for a group
+app.post('/api/groups/:groupId/challenges', (req, res) => {
+  const groupId = req.params.groupId;
+  const { challenge_ids } = req.body;
+  
+  if (!challenge_ids || !Array.isArray(challenge_ids) || challenge_ids.length === 0) {
+    return res.status(400).json({ error: 'Devi selezionare almeno una sfida' });
+  }
+  
+  // First, delete any existing group challenges
+  const deleteQuery = 'DELETE FROM group_challenges WHERE group_id = ?';
+  db.query(deleteQuery, [groupId], (err) => {
+    if (err) {
+      console.error('Error deleting existing group challenges:', err);
+      return res.status(500).json({ error: 'Errore durante l\'aggiornamento delle sfide del gruppo' });
+    }
+    
+    // Prepare values for bulk insert
+    const values = challenge_ids.map(challengeId => [groupId, challengeId]);
+    
+    // Insert new group challenges
+    const insertQuery = 'INSERT INTO group_challenges (group_id, challenge_id) VALUES ?';
+    db.query(insertQuery, [values], (err) => {
+      if (err) {
+        console.error('Error inserting group challenges:', err);
+        return res.status(500).json({ error: 'Errore durante il salvataggio delle sfide del gruppo' });
+      }
+      
+      res.json({ success: true, message: 'Sfide del gruppo salvate con successo' });
     });
   });
 });

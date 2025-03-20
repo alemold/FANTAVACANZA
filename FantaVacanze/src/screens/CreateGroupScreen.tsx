@@ -36,12 +36,15 @@ const CreateGroupScreen = ({ navigation }: Props) => {
       
       setLoading(false);
       
-      // Navigate to the Home screen after successful creation
-      // Reset the navigation stack to prevent going back to the form
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'Home' }],
-      });
+      // Navigate to the Challenge Selection screen after successful creation
+      if (result && result.group && result.group.id) {
+        navigation.navigate('ChallengeSelection', {
+          groupId: result.group.id,
+          groupName: name
+        });
+      } else {
+        throw new Error('Risposta dal server non valida');
+      }
       
     } catch (err) {
       setLoading(false);

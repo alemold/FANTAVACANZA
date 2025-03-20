@@ -425,6 +425,47 @@ export const groupService = {
       }
       throw new Error('Network error while joining group');
     }
+  },
+
+  // Get all challenge categories with their challenges
+  getChallengeCategories: async () => {
+    try {
+      const response = await api.get('/challenges/categories');
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response) {
+        throw new Error(error.response.data.error || 'Failed to fetch challenge categories');
+      }
+      throw new Error('Network error while fetching challenge categories');
+    }
+  },
+
+  // Save selected challenges for a group
+  saveGroupChallenges: async (groupId: string, challengeIds: string[]) => {
+    try {
+      const response = await api.post(`/groups/${groupId}/challenges`, {
+        challenge_ids: challengeIds
+      });
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response) {
+        throw new Error(error.response.data.error || 'Failed to save group challenges');
+      }
+      throw new Error('Network error while saving group challenges');
+    }
+  },
+
+  // Get participants for a specific group
+  getGroupParticipants: async (groupId: string) => {
+    try {
+      const response = await api.get(`/groups/${groupId}/participants`);
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response) {
+        throw new Error(error.response.data.error || 'Failed to fetch group participants');
+      }
+      throw new Error('Network error while fetching group participants');
+    }
   }
 };
 

@@ -33,6 +33,8 @@ const HomeScreen = ({ navigation }: Props) => {
   // Animation values for modals
   const confirmModalAnim = React.useRef(new Animated.Value(Dimensions.get('window').height)).current;
   const createModalAnim = React.useRef(new Animated.Value(Dimensions.get('window').height)).current;
+  // Add new animation value for background overlay opacity
+  const overlayOpacityAnim = React.useRef(new Animated.Value(0)).current;
 
   // Fetch groups from the database when component mounts
   useEffect(() => {
@@ -95,24 +97,45 @@ const HomeScreen = ({ navigation }: Props) => {
     
     // Reset the animation value and animate up
     createModalAnim.setValue(Dimensions.get('window').height);
-    Animated.timing(createModalAnim, {
-      toValue: 0,
-      duration: 300,
-      useNativeDriver: true
-    }).start();
+    // Reset opacity animation value
+    overlayOpacityAnim.setValue(0);
+    
+    // Run animations in parallel
+    Animated.parallel([
+      Animated.timing(createModalAnim, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true
+      }),
+      Animated.timing(overlayOpacityAnim, {
+        toValue: 1,
+        duration: 300, // Faster duration for the background overlay
+        useNativeDriver: true
+      })
+    ]).start();
   };
   
   const openCreateGroupFlow = () => {
     // First show the confirmation modal
     setShowConfirmModal(true);
     
-    // Reset the animation value and animate up
+    // Reset the animation values
     confirmModalAnim.setValue(Dimensions.get('window').height);
-    Animated.timing(confirmModalAnim, {
-      toValue: 0,
-      duration: 300,
-      useNativeDriver: true
-    }).start();
+    overlayOpacityAnim.setValue(0);
+    
+    // Run animations in parallel
+    Animated.parallel([
+      Animated.timing(confirmModalAnim, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true
+      }),
+      Animated.timing(overlayOpacityAnim, {
+        toValue: 1,
+        duration: 300, // Faster duration for the background overlay
+        useNativeDriver: true
+      })
+    ]).start();
   };
 
   const renderGroup = ({ item }: { item: GroupData }) => (
@@ -189,18 +212,46 @@ const HomeScreen = ({ navigation }: Props) => {
         <Modal
           visible={showConfirmModal}
           onDismiss={() => {
-            // Animate the modal sliding down before closing
-            Animated.timing(confirmModalAnim, {
-              toValue: Dimensions.get('window').height,
-              duration: 300,
-              useNativeDriver: true
-            }).start(() => setShowConfirmModal(false));
+            // Animate the modal sliding down and overlay fading out before closing
+            Animated.parallel([
+              Animated.timing(confirmModalAnim, {
+                toValue: Dimensions.get('window').height,
+                duration: 300,
+                useNativeDriver: true
+              }),
+              Animated.timing(overlayOpacityAnim, {
+                toValue: 0,
+                duration: 300, // Changed from 500 to 300
+                useNativeDriver: true
+              })
+            ]).start(() => setShowConfirmModal(false));
           }}
           style={styles.modalContainer}
           animationType="none"
           transparent={true}
         >
-          <View style={styles.modalOverlay}>
+          <Animated.View style={[styles.modalOverlay, {opacity: overlayOpacityAnim}]}>
+            {/* Close button positioned above the modal */}
+            <TouchableOpacity
+              style={styles.closeButtonContainer}
+              onPress={() => {
+                // Animate the modal sliding down and overlay fading out before closing
+                Animated.parallel([
+                  Animated.timing(confirmModalAnim, {
+                    toValue: Dimensions.get('window').height,
+                    duration: 300,
+                    useNativeDriver: true
+                  }),
+                  Animated.timing(overlayOpacityAnim, {
+                    toValue: 0,
+                    duration: 300, // Changed from 500 to 300 to match modal animation
+                    useNativeDriver: true
+                  })
+                ]).start(() => setShowConfirmModal(false));
+              }}
+            >
+              <Text style={styles.closeButtonText}>Chiudi</Text>
+            </TouchableOpacity>
 
             <Animated.View 
               style={[styles.modalContent, {transform: [{translateY: confirmModalAnim}]}]}>
@@ -229,7 +280,7 @@ const HomeScreen = ({ navigation }: Props) => {
                 Crea Gruppo
               </Button>
             </Animated.View>
-          </View>
+          </Animated.View>
         </Modal>
       </Portal>
 
@@ -238,18 +289,46 @@ const HomeScreen = ({ navigation }: Props) => {
         <Modal
           visible={showCreateGroupModal}
           onDismiss={() => {
-            // Animate the modal sliding down before closing
-            Animated.timing(createModalAnim, {
-              toValue: Dimensions.get('window').height,
-              duration: 300,
-              useNativeDriver: true
-            }).start(() => setShowCreateGroupModal(false));
+            // Animate the modal sliding down and overlay fading out before closing
+            Animated.parallel([
+              Animated.timing(createModalAnim, {
+                toValue: Dimensions.get('window').height,
+                duration: 300,
+                useNativeDriver: true
+              }),
+              Animated.timing(overlayOpacityAnim, {
+                toValue: 0,
+                duration: 300, // Changed from 500 to 300 to match modal animation
+                useNativeDriver: true
+              })
+            ]).start(() => setShowCreateGroupModal(false));
           }}
           style={styles.modalContainer}
           animationType="none"
           transparent={true}
         >
-          <View style={styles.modalOverlay}>
+          <Animated.View style={[styles.modalOverlay, {opacity: overlayOpacityAnim}]}>
+            {/* Close button positioned above the modal */}
+            <TouchableOpacity
+              style={styles.closeButtonContainer}
+              onPress={() => {
+                // Animate the modal sliding down and overlay fading out before closing
+                Animated.parallel([
+                  Animated.timing(createModalAnim, {
+                    toValue: Dimensions.get('window').height,
+                    duration: 300,
+                    useNativeDriver: true
+                  }),
+                  Animated.timing(overlayOpacityAnim, {
+                    toValue: 0,
+                    duration: 500, // Slightly faster fade-out
+                    useNativeDriver: true
+                  })
+                ]).start(() => setShowCreateGroupModal(false));
+              }}
+            >
+              <Text style={styles.closeButtonText}>Chiudi</Text>
+            </TouchableOpacity>
 
             <Animated.View 
               style={[styles.modalContent, {transform: [{translateY: createModalAnim}]}]}>
@@ -277,7 +356,7 @@ const HomeScreen = ({ navigation }: Props) => {
                 Crea Gruppo
               </Button>
             </Animated.View>
-          </View>
+          </Animated.View>
         </Modal>
       </Portal>
     </View>
@@ -362,6 +441,21 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     height: Dimensions.get('window').height / 2,
+  },
+  closeButtonContainer: {
+    position: 'absolute',
+    top: Dimensions.get('window').height / 2 - 60, // Reverted back to original position
+    alignSelf: 'center',
+    backgroundColor: 'rgba(150, 150, 150, 0.7)', // Semi-transparent gray
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 20,
+    zIndex: 10,
+  },
+  closeButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 16,
   },
   modalHeader: {
     position: 'absolute',

@@ -9,9 +9,11 @@ import RegisterScreen from '../screens/RegisterScreen';
 import VacationGroupScreen from '../screens/VacationGroupScreen';
 import CreateVacationScreen from '../screens/CreateVacationScreen';
 import CreateGroupScreen from '../screens/CreateGroupScreen';
+import ChallengeSelectionScreen from '../screens/ChallengeSelectionScreen';
 import ActivityTrackingScreen from '../screens/ActivityTrackingScreen';
 import LeaderboardScreen from '../screens/LeaderboardScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+import GroupSettingsScreen from '../screens/GroupSettingsScreen';
 
 // Define the stack navigator parameter list
 export type RootStackParamList = {
@@ -21,9 +23,11 @@ export type RootStackParamList = {
   VacationGroup: { groupId: string };
   CreateVacation: undefined;
   CreateGroup: undefined;
+  ChallengeSelection: { groupId: string, groupName: string };
   ActivityTracking: { vacationId: string };
   Leaderboard: { groupId: string };
   Profile: undefined;
+  GroupSettings: { groupId: string, groupName: string };
 };
 
 const Stack = createStackNavigator<RootStackParamList>();
@@ -62,6 +66,11 @@ const AppNavigator = () => {
           name="CreateGroup" 
           component={CreateGroupScreen} 
         />
+        
+        <Stack.Screen 
+          name="ChallengeSelection" 
+          component={ChallengeSelectionScreen} 
+        />
 
         <Stack.Screen 
           name="ActivityTracking" 
@@ -74,6 +83,10 @@ const AppNavigator = () => {
         <Stack.Screen 
           name="Profile" 
           component={ProfileScreen} 
+        />
+        <Stack.Screen 
+          name="GroupSettings" 
+          component={GroupSettingsScreen} 
         />
       </Stack.Navigator>
     </NavigationContainer>
