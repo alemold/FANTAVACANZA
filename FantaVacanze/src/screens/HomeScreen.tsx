@@ -144,20 +144,14 @@ const HomeScreen = ({ navigation }: Props) => {
       style={styles.cardContainer}
     >
       <Card style={styles.card}>
-        <Card.Content>
-          <Title>{item.name}</Title>
+        <Card.Content style={styles.cardContent}>
+          <Title style={styles.cardTitle}>{item.name}</Title>
           <View style={styles.detailsRow}>
             <Text style={styles.participants}>Partecipanti: {item.participants}</Text>
-            <Text style={styles.date}>Creato il: {item.created_at}</Text>
-          </View>
-          <View style={styles.pointsContainer}>
             <Text style={styles.points}>{item.points} punti</Text>
           </View>
+          <Text style={styles.date}>Creato il: {item.created_at}</Text>
         </Card.Content>
-        <Card.Actions>
-          <Button onPress={() => navigation.navigate('Leaderboard', { groupId: item.id })}>Classifica</Button>
-          <Button onPress={() => navigation.navigate('ActivityTracking', { vacationId: item.id })}>Attività</Button>
-        </Card.Actions>
       </Card>
     </TouchableOpacity>
   );
@@ -372,30 +366,38 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   cardContainer: {
-    marginBottom: 16,
+    marginBottom: 12,
   },
   card: {
-    elevation: 4,
+    elevation: 3,
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  cardContent: {
+    padding: 12,
+  },
+  cardTitle: {
+    fontSize: 18,
+    marginBottom: 4,
   },
   detailsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 8,
+    alignItems: 'center',
+    marginTop: 6,
+    marginBottom: 4,
   },
   date: {
-    fontSize: 14,
-    color: '#555',
+    fontSize: 12,
+    color: '#666',
+    marginTop: 4,
   },
   participants: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#555',
   },
-  pointsContainer: {
-    marginTop: 12,
-    alignItems: 'flex-end',
-  },
   points: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
     color: '#2196F3',
   },

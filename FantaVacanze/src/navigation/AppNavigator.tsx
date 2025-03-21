@@ -6,6 +6,7 @@ import { createStackNavigator } from '@react-navigation/stack';
 import HomeScreen from '../screens/HomeScreen';
 import LoginScreen from '../screens/LoginScreen';
 import RegisterScreen from '../screens/RegisterScreen';
+import SplashScreen from '../screens/SplashScreen';
 import VacationGroupScreen from '../screens/VacationGroupScreen';
 import CreateVacationScreen from '../screens/CreateVacationScreen';
 import CreateGroupScreen from '../screens/CreateGroupScreen';
@@ -17,6 +18,7 @@ import GroupSettingsScreen from '../screens/GroupSettingsScreen';
 
 // Define the stack navigator parameter list
 export type RootStackParamList = {
+  Splash: undefined;
   Home: undefined;
   Login: undefined;
   Register: undefined;
@@ -36,12 +38,16 @@ const AppNavigator = () => {
   return (
     <NavigationContainer>
       <Stack.Navigator 
-        initialRouteName="Login"
+        initialRouteName="Splash"
         screenOptions={{
           headerShown: false, // Hide the default header for all screens
           cardStyle: { backgroundColor: '#e8e1f0' } // Updated to match the new background color
         }}
       >
+        <Stack.Screen 
+          name="Splash" 
+          component={SplashScreen} 
+        />
         <Stack.Screen 
           name="Login" 
           component={LoginScreen} 

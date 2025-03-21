@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, FlatList, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, ScrollView, FlatList, ActivityIndicator, Share, Clipboard, Platform, Linking } from 'react-native';
 import CustomHeader from '../components/CustomHeader';
-import { Text, Card, Button, Title, Paragraph, Avatar, List, Divider, IconButton } from 'react-native-paper';
+import { Text, Card, Button, Title, Paragraph, Avatar, List, Divider, IconButton, Modal, Portal, TextInput, Snackbar } from 'react-native-paper';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList } from '../navigation/AppNavigator';
@@ -56,6 +56,12 @@ const VacationGroupScreen = ({ navigation, route }: Props) => {
   const [vacationGroup, setVacationGroup] = useState<VacationGroup | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteCode, setInviteCode] = useState('');
+  const [inviteLink, setInviteLink] = useState('');
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [snackbarVisible, setSnackbarVisible] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
 
   // Fetch the vacation group details and participants from the database
   useEffect(() => {
@@ -162,6 +168,52 @@ const VacationGroupScreen = ({ navigation, route }: Props) => {
     );
   }
 
+  // Function to generate an invitation link
+  const generateInviteLink = async () => {
+    try {
+      const response = await groupService.generateInviteLink(groupId);
+      
+      if (response && response.invite_code) {
+        setInviteCode(response.invite_code);
+        setInviteLink(response.invite_link);
+        setShowInviteModal(true);
+      }
+    } catch (err) {
+      console.error('Error generating invite link:', err);
+      setSnackbarMessage('Errore nella generazione del link di invito');
+      setSnackbarVisible(true);
+    } finally {
+      setInviteLoading(false);
+    }
+  };
+
+  // Function to share the invitation link
+  const shareInviteLink = async () => {
+    try {
+      const result = await Share.share({
+        message: `Unisciti al mio gruppo "${vacationGroup?.name}" su FantaVacanze! Clicca qui: ${inviteLink}`,
+        url: inviteLink, // iOS only
+        title: 'Invito a FantaVacanze' // Android only
+      });
+      
+      if (result.action === Share.sharedAction) {
+        setSnackbarMessage('Link condiviso con successo!');
+        setSnackbarVisible(true);
+      }
+    } catch (error) {
+      console.error('Error sharing invite link:', error);
+      setSnackbarMessage('Errore nella condivisione del link');
+      setSnackbarVisible(true);
+    }
+  };
+
+  // Function to copy the invitation link to clipboard
+  const copyInviteLink = () => {
+    Clipboard.setString(inviteLink);
+    setSnackbarMessage('Link copiato negli appunti!');
+    setSnackbarVisible(true);
+  };
+
   return (
     <View style={styles.containerWrapper}>
       <CustomHeader 
@@ -171,6 +223,56 @@ const VacationGroupScreen = ({ navigation, route }: Props) => {
         groupName={vacationGroup.name} 
       />
       <ScrollView style={styles.container}>
+      
+      {/* Invitation Modal */}
+      <Portal>
+        <Modal
+          visible={showInviteModal}
+          onDismiss={() => setShowInviteModal(false)}
+          contentContainerStyle={styles.modalContainer}
+        >
+          <Title style={styles.modalTitle}>Invita Amici</Title>
+          <Text style={styles.modalText}>
+            Condividi questo link con i tuoi amici per invitarli a unirsi al gruppo "{vacationGroup?.name}".
+          </Text>
+          
+          <TextInput
+            mode="outlined"
+            value={inviteLink}
+            disabled
+            style={styles.linkInput}
+            right={<TextInput.Icon icon="content-copy" onPress={copyInviteLink} />}
+          />
+          
+          <View style={styles.modalButtonsContainer}>
+            <Button 
+              mode="contained" 
+              icon="share-variant" 
+              onPress={shareInviteLink}
+              style={styles.shareButton}
+            >
+              Condividi
+            </Button>
+            
+            <Button 
+              mode="outlined" 
+              onPress={() => setShowInviteModal(false)}
+              style={styles.closeButton}
+            >
+              Chiudi
+            </Button>
+          </View>
+        </Modal>
+      </Portal>
+      
+      <Snackbar
+        visible={snackbarVisible}
+        onDismiss={() => setSnackbarVisible(false)}
+        duration={3000}
+        style={styles.snackbar}
+      >
+        {snackbarMessage}
+      </Snackbar>
       <View style={styles.section}>
         <Title style={styles.sectionTitle}>Partecipanti</Title>
         {vacationGroup && vacationGroup.participants.length === 1 && vacationGroup.participants[0].isAdmin ? (
@@ -180,8 +282,13 @@ const VacationGroupScreen = ({ navigation, route }: Props) => {
               <Button 
                 mode="contained" 
                 icon="account-plus"
-                onPress={() => console.log('Invita amici')}
+                onPress={() => {
+                  setInviteLoading(true);
+                  generateInviteLink();
+                }}
                 style={styles.inviteButton}
+                loading={inviteLoading}
+                disabled={inviteLoading}
               >
                 + invita gli amici
               </Button>
@@ -321,6 +428,46 @@ const styles = StyleSheet.create({
   inviteButton: {
     marginTop: 8,
     paddingHorizontal: 16,
+  },
+  // Modal styles
+  modalContainer: {
+    backgroundColor: 'white',
+    padding: 20,
+    margin: 20,
+    borderRadius: 10,
+    elevation: 5,
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    marginBottom: 16,
+    textAlign: 'center',
+    color: '#2196F3',
+  },
+  modalText: {
+    fontSize: 16,
+    marginBottom: 20,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  linkInput: {
+    marginBottom: 20,
+    backgroundColor: '#f5f5f5',
+  },
+  modalButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  shareButton: {
+    flex: 0.48,
+    marginRight: 8,
+  },
+  closeButton: {
+    flex: 0.48,
+    marginLeft: 8,
+  },
+  snackbar: {
+    bottom: 20,
   },
 });
 

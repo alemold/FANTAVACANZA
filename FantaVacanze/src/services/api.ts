@@ -403,6 +403,55 @@ export const groupService = {
     }
   },
   
+  // Generate an invitation link for a group
+  generateInviteLink: async (groupId: string) => {
+    try {
+      // Get current user from AsyncStorage
+      const userData = await AsyncStorage.getItem('user');
+      if (!userData) {
+        throw new Error('User not authenticated');
+      }
+      
+      const user = JSON.parse(userData);
+      
+      const response = await api.post(`/groups/${groupId}/invite`, {
+        user_id: user.id
+      });
+      
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response) {
+        throw new Error(error.response.data.error || 'Failed to generate invitation link');
+      }
+      throw new Error('Network error while generating invitation link');
+    }
+  },
+  
+  // Join a group using an invitation code
+  joinGroupByInviteCode: async (inviteCode: string) => {
+    try {
+      // Get current user from AsyncStorage
+      const userData = await AsyncStorage.getItem('user');
+      if (!userData) {
+        throw new Error('User not authenticated');
+      }
+      
+      const user = JSON.parse(userData);
+      
+      const response = await api.post(`/groups/join-by-invite`, {
+        user_id: user.id,
+        invite_code: inviteCode
+      });
+      
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response) {
+        throw new Error(error.response.data.error || 'Failed to join group');
+      }
+      throw new Error('Network error while joining group');
+    }
+  },
+  
   // Join an existing group
   joinGroup: async (groupId: string) => {
     try {

@@ -557,6 +557,28 @@ app.get('/api/groups/:groupId', (req, res) => {
   });
 });
 
+// Get participants for a specific group
+app.get('/api/groups/:groupId/participants', (req, res) => {
+  const groupId = req.params.groupId;
+  
+  const query = `
+    SELECT u.id as user_id, u.username, u.avatar_url, u.total_points as points, gu.role
+    FROM group_users gu
+    JOIN users u ON gu.user_id = u.id
+    WHERE gu.group_id = ?
+    ORDER BY u.total_points DESC
+  `;
+  
+  db.query(query, [groupId], (err, participants) => {
+    if (err) {
+      console.error('Error fetching group participants:', err);
+      return res.status(500).json({ error: 'Errore durante il recupero dei partecipanti del gruppo' });
+    }
+    
+    res.json({ participants });
+  });
+});
+
 app.post('/api/groups/:groupId/join', (req, res) => {
   const groupId = req.params.groupId;
   const { user_id } = req.body;
@@ -627,6 +649,133 @@ app.post('/api/groups/:groupId/challenges', (req, res) => {
       }
       
       res.json({ success: true, message: 'Sfide del gruppo salvate con successo' });
+    });
+  });
+});
+
+// Generate an invitation code for a group
+app.post('/api/groups/:groupId/invite', (req, res) => {
+  const groupId = req.params.groupId;
+  const { user_id } = req.body;
+  
+  if (!user_id) {
+    return res.status(400).json({ error: 'ID utente richiesto' });
+  }
+  
+  // Check if the user is a member of the group
+  db.query('SELECT * FROM group_users WHERE group_id = ? AND user_id = ?', [groupId, user_id], (err, members) => {
+    if (err) {
+      console.error('Error checking membership:', err);
+      return res.status(500).json({ error: 'Errore durante la verifica dell\'appartenenza al gruppo' });
+    }
+    
+    if (members.length === 0) {
+      return res.status(403).json({ error: 'Non sei membro di questo gruppo' });
+    }
+    
+    // Generate a unique invitation code
+    const inviteCode = Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
+    const expiryDate = new Date();
+    expiryDate.setDate(expiryDate.getDate() + 7); // Invitation valid for 7 days
+    
+    // Check if there's an existing invitation for this group
+    db.query('SELECT * FROM group_invitations WHERE group_id = ? AND created_by = ?', [groupId, user_id], (err, invitations) => {
+      if (err) {
+        console.error('Error checking existing invitations:', err);
+        return res.status(500).json({ error: 'Errore durante la verifica degli inviti esistenti' });
+      }
+      
+      // If there's an existing invitation, update it
+      if (invitations.length > 0) {
+        db.query('UPDATE group_invitations SET invite_code = ?, expires_at = ? WHERE group_id = ? AND created_by = ?', 
+          [inviteCode, expiryDate, groupId, user_id], (err) => {
+            if (err) {
+              console.error('Error updating invitation:', err);
+              return res.status(500).json({ error: 'Errore durante l\'aggiornamento dell\'invito' });
+            }
+            
+            res.json({ 
+              invite_code: inviteCode, 
+              expires_at: expiryDate,
+              invite_link: `fantavacanze://join?code=${inviteCode}`,
+              message: 'Codice di invito generato con successo' 
+            });
+        });
+      } else {
+        // Otherwise, create a new invitation
+        db.query('INSERT INTO group_invitations (group_id, invite_code, created_by, expires_at) VALUES (?, ?, ?, ?)', 
+          [groupId, inviteCode, user_id, expiryDate], (err) => {
+            if (err) {
+              console.error('Error creating invitation:', err);
+              return res.status(500).json({ error: 'Errore durante la creazione dell\'invito' });
+            }
+            
+            res.json({ 
+              invite_code: inviteCode, 
+              expires_at: expiryDate,
+              invite_link: `fantavacanze://join?code=${inviteCode}`,
+              message: 'Codice di invito generato con successo' 
+            });
+        });
+      }
+    });
+  });
+});
+
+// Join a group using an invitation code
+app.post('/api/groups/join-by-invite', (req, res) => {
+  const { user_id, invite_code } = req.body;
+  
+  if (!user_id || !invite_code) {
+    return res.status(400).json({ error: 'ID utente e codice di invito richiesti' });
+  }
+  
+  // Find the invitation by code
+  db.query('SELECT * FROM group_invitations WHERE invite_code = ? AND expires_at > NOW()', [invite_code], (err, invitations) => {
+    if (err) {
+      console.error('Error finding invitation:', err);
+      return res.status(500).json({ error: 'Errore durante la ricerca dell\'invito' });
+    }
+    
+    if (invitations.length === 0) {
+      return res.status(404).json({ error: 'Invito non valido o scaduto' });
+    }
+    
+    const invitation = invitations[0];
+    const groupId = invitation.group_id;
+    
+    // Check if the user is already a member of the group
+    db.query('SELECT * FROM group_users WHERE group_id = ? AND user_id = ?', [groupId, user_id], (err, members) => {
+      if (err) {
+        console.error('Error checking membership:', err);
+        return res.status(500).json({ error: 'Errore durante la verifica dell\'appartenenza al gruppo' });
+      }
+      
+      if (members.length > 0) {
+        return res.status(409).json({ error: 'Sei già membro di questo gruppo' });
+      }
+      
+      // Add the user to the group
+      const insertQuery = 'INSERT INTO group_users (group_id, user_id, role) VALUES (?, ?, "member")';
+      db.query(insertQuery, [groupId, user_id], (err, result) => {
+        if (err) {
+          console.error('Error adding member to group:', err);
+          return res.status(500).json({ error: 'Errore durante l\'aggiunta del membro al gruppo' });
+        }
+        
+        // Get the group details
+        db.query('SELECT * FROM game_groups WHERE id = ?', [groupId], (err, groups) => {
+          if (err) {
+            console.error('Error fetching group:', err);
+            return res.status(500).json({ error: 'Errore durante il recupero del gruppo' });
+          }
+          
+          res.json({ 
+            group: groups[0], 
+            message: 'Ti sei unito al gruppo con successo' 
+          });
+        });
+      });
     });
   });
 });
