@@ -397,9 +397,13 @@ export const groupService = {
       return response.data;
     } catch (error) {
       if (axios.isAxiosError(error) && error.response) {
-        throw new Error(error.response.data.error || 'Failed to fetch group');
+        if (error.response.status === 404) {
+          throw new Error('Gruppo non trovato. L\'ID potrebbe non essere valido.');
+        } else {
+          throw new Error(error.response.data.error || 'Errore durante il recupero del gruppo');
+        }
       }
-      throw new Error('Network error while fetching group');
+      throw new Error('Errore di rete durante il recupero del gruppo. Verifica la tua connessione.');
     }
   },
   
@@ -476,6 +480,38 @@ export const groupService = {
     }
   },
 
+  // Join a group using a group_id
+  joinGroupByCode: async (groupCode: string) => {
+    try {
+      // Get current user from AsyncStorage
+      const userData = await AsyncStorage.getItem('user');
+      if (!userData) {
+        throw new Error('User not authenticated');
+      }
+      
+      const user = JSON.parse(userData);
+      
+      // Cambio dell'endpoint da /api/groups/join a /groups/join
+      const response = await api.post(`/groups/join`, {
+        user_id: user.id,
+        group_id: groupCode
+      });
+      
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response) {
+        if (error.response.status === 404) {
+          throw new Error('Gruppo non trovato. Verifica l\'ID e riprova.');
+        } else if (error.response.status === 409) {
+          throw new Error('Sei già membro di questo gruppo.');
+        } else {
+          throw new Error(error.response.data.error || 'Errore durante l\'accesso al gruppo');
+        }
+      }
+      throw new Error('Errore di rete durante l\'accesso al gruppo. Verifica la tua connessione.');
+    }
+  },
+
   // Get all challenge categories with their challenges
   getChallengeCategories: async () => {
     try {
@@ -514,6 +550,19 @@ export const groupService = {
         throw new Error(error.response.data.error || 'Failed to fetch group participants');
       }
       throw new Error('Network error while fetching group participants');
+    }
+  },
+
+  // Get challenges for a specific group
+  getGroupChallenges: async (groupId: string) => {
+    try {
+      const response = await api.get(`/groups/${groupId}/challenges`);
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response) {
+        throw new Error(error.response.data.error || 'Failed to fetch group challenges');
+      }
+      throw new Error('Network error while fetching group challenges');
     }
   }
 };

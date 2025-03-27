@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, FlatList, TouchableOpacity, Modal, Dimensions, Animated } from 'react-native';
+import { View, StyleSheet, FlatList, TouchableOpacity, Modal, Dimensions, Animated, Keyboard, KeyboardEvent, Platform, Easing, Clipboard, ScrollView } from 'react-native';
 import CustomHeader from '../components/CustomHeader';
-import { Text, Card, Button, FAB, Title, Paragraph, Portal, TextInput, ActivityIndicator } from 'react-native-paper';
+import { Text, Card, Button, FAB, Title, Paragraph, Portal, TextInput, ActivityIndicator, Snackbar } from 'react-native-paper';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { groupService } from '../services/api';
@@ -26,16 +26,26 @@ const HomeScreen = ({ navigation }: Props) => {
   const [loading, setLoading] = useState(false);
   const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [showJoinGroupModal, setShowJoinGroupModal] = useState(false);
   const [groupName, setGroupName] = useState('');
+  const [groupId, setGroupId] = useState('');
   const [error, setError] = useState('');
   const [createLoading, setCreateLoading] = useState(false);
+  const [joinLoading, setJoinLoading] = useState(false);
+  const [snackbarVisible, setSnackbarVisible] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+  
+  // Add keyboard state variables
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
   
   // Animation values for modals
   const confirmModalAnim = React.useRef(new Animated.Value(Dimensions.get('window').height)).current;
   const createModalAnim = React.useRef(new Animated.Value(Dimensions.get('window').height)).current;
+  const joinModalAnim = React.useRef(new Animated.Value(Dimensions.get('window').height)).current;
   // Add new animation value for background overlay opacity
   const overlayOpacityAnim = React.useRef(new Animated.Value(0)).current;
-
+  
   // Fetch groups from the database when component mounts
   useEffect(() => {
     const fetchGroups = async () => {
@@ -52,10 +62,10 @@ const HomeScreen = ({ navigation }: Props) => {
         setLoading(false);
       }
     };
-
+  
     fetchGroups();
   }, []);
-
+  
   const handleCreateGroup = async () => {
     // Reset error state
     setError('');
@@ -65,7 +75,7 @@ const HomeScreen = ({ navigation }: Props) => {
       setError('Per favore, inserisci il nome del gruppo');
       return;
     }
-
+  
     try {
       setCreateLoading(true);
       
@@ -90,7 +100,56 @@ const HomeScreen = ({ navigation }: Props) => {
       console.error(err);
     }
   };
-
+  
+  // Updated join group function to use group code
+  const handleJoinGroup = async () => {
+    // Reset error state
+    setError('');
+    
+    // Basic validation
+    if (!groupId) {
+      setError('Per favore, inserisci l\'ID del gruppo');
+      return;
+    }
+    
+    console.log('Tentativo di join con ID:', groupId);
+  
+    try {
+      setJoinLoading(true);
+      
+      // Join group using the group code
+      const response = await groupService.joinGroupByCode(groupId);
+      console.log('Risposta dal server:', response);
+      
+      // Close the modal and reset form
+      setShowJoinGroupModal(false);
+      setGroupId('');
+      
+      // Show success message
+      setSnackbarMessage('Ti sei unito al gruppo con successo!');
+      setSnackbarVisible(true);
+      
+      // Refresh groups list with a slight delay to ensure backend has updated
+      setTimeout(async () => {
+        try {
+          const updatedGroups = await groupService.getUserGroups();
+          if (updatedGroups && updatedGroups.groups) {
+            setGroups(updatedGroups.groups);
+          }
+        } catch (refreshErr) {
+          console.error('Error refreshing groups:', refreshErr);
+        }
+      }, 500);
+      
+      setJoinLoading(false);
+      
+    } catch (err: any) {
+      setJoinLoading(false);
+      setError(err.message || 'Errore durante l\'accesso al gruppo. Verifica l\'ID e riprova.');
+      console.error('Errore join gruppo:', err);
+    }
+  };
+  
   // Function to show the create group modal with animation
   const showCreateGroupModalWithAnimation = () => {
     setShowCreateGroupModal(true);
@@ -100,20 +159,74 @@ const HomeScreen = ({ navigation }: Props) => {
     // Reset opacity animation value
     overlayOpacityAnim.setValue(0);
     
-    // Run animations in parallel
+    // Get keyboard animation duration from platform settings
+    // iOS typically uses 250ms, Android varies but often around 300ms
+    const animationDuration = Platform.OS === 'ios' ? 250 : 300;
+    
+    // Run animations in parallel with easing for a smoother slide
     Animated.parallel([
       Animated.timing(createModalAnim, {
         toValue: 0,
-        duration: 300,
+        duration: animationDuration,
+        easing: Easing.out(Easing.cubic), // Add easing for smoother animation
         useNativeDriver: true
       }),
       Animated.timing(overlayOpacityAnim, {
         toValue: 1,
-        duration: 300, // Faster duration for the background overlay
+        duration: animationDuration,
         useNativeDriver: true
       })
     ]).start();
   };
+  
+  // Function to show the join group modal with animation
+  const showJoinGroupModalWithAnimation = () => {
+    setShowJoinGroupModal(true);
+    
+    // Reset the animation value and animate up
+    joinModalAnim.setValue(Dimensions.get('window').height);
+    // Reset opacity animation value
+    overlayOpacityAnim.setValue(0);
+    
+    // Get keyboard animation duration from platform settings
+    // iOS typically uses 250ms, Android varies but often around 300ms
+    const animationDuration = Platform.OS === 'ios' ? 250 : 300;
+    
+    // Run animations in parallel with easing for a smoother slide
+    Animated.parallel([
+      Animated.timing(joinModalAnim, {
+        toValue: 0,
+        duration: animationDuration,
+        easing: Easing.out(Easing.cubic), // Add easing for smoother animation
+        useNativeDriver: true
+      }),
+      Animated.timing(overlayOpacityAnim, {
+        toValue: 1,
+        duration: animationDuration,
+        useNativeDriver: true
+      })
+    ]).start();
+  };
+  
+  
+  // Add keyboard event listeners
+  useEffect(() => {
+    const keyboardWillShowListener = Keyboard.addListener('keyboardWillShow', (e: KeyboardEvent) => {
+      setKeyboardVisible(true);
+      setKeyboardHeight(e.endCoordinates.height);
+    });
+  
+    const keyboardWillHideListener = Keyboard.addListener('keyboardWillHide', () => {
+      setKeyboardVisible(false);
+      setKeyboardHeight(0);
+    });
+  
+    // Cleanup listeners on component unmount
+    return () => {
+      keyboardWillShowListener.remove();
+      keyboardWillHideListener.remove();
+    };
+  }, []);
   
   const openCreateGroupFlow = () => {
     // First show the confirmation modal
@@ -123,21 +236,26 @@ const HomeScreen = ({ navigation }: Props) => {
     confirmModalAnim.setValue(Dimensions.get('window').height);
     overlayOpacityAnim.setValue(0);
     
-    // Run animations in parallel
+    // Get keyboard animation duration from platform settings
+    // iOS typically uses 250ms, Android varies but often around 300ms
+    const animationDuration = Platform.OS === 'ios' ? 250 : 300;
+    
+    // Run animations in parallel with easing for a smoother slide
     Animated.parallel([
       Animated.timing(confirmModalAnim, {
         toValue: 0,
-        duration: 300,
+        duration: animationDuration,
+        easing: Easing.out(Easing.cubic), // Add easing for smoother animation
         useNativeDriver: true
       }),
       Animated.timing(overlayOpacityAnim, {
         toValue: 1,
-        duration: 300, // Faster duration for the background overlay
+        duration: animationDuration,
         useNativeDriver: true
       })
     ]).start();
   };
-
+  
   const renderGroup = ({ item }: { item: GroupData }) => (
     <TouchableOpacity 
       onPress={() => navigation.navigate('VacationGroup', { groupId: item.id })}
@@ -155,20 +273,43 @@ const HomeScreen = ({ navigation }: Props) => {
       </Card>
     </TouchableOpacity>
   );
-
+  
   const { height } = Dimensions.get('window');
-
+  
   return (
     <View style={styles.container}>
       <CustomHeader />
       
       {groups.length > 0 ? (
-        <FlatList
-          data={groups}
-          renderItem={renderGroup}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContainer}
-        />
+        <>
+          <FlatList
+            data={groups}
+            renderItem={renderGroup}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.listContainer}
+          />
+          <View style={styles.newGroupButtonContainer}>
+            <Button 
+              mode="contained" 
+              onPress={openCreateGroupFlow}
+              style={styles.newGroupButton}
+              labelStyle={styles.newGroupButtonLabel}
+              icon="plus"
+            >
+              Nuovo Gruppo
+            </Button>
+            
+            <Button 
+              mode="outlined" 
+              onPress={showJoinGroupModalWithAnimation}
+              style={[styles.newGroupButton, styles.joinGroupButton, {marginTop: 10}]}
+              labelStyle={styles.newGroupButtonLabel}
+              icon="account-group"
+            >
+              Unisciti a un gruppo
+            </Button>
+          </View>
+        </>
       ) : (
         <View style={styles.emptyContainer}>
           <Button 
@@ -182,7 +323,7 @@ const HomeScreen = ({ navigation }: Props) => {
           
           <Button 
             mode="outlined" 
-            onPress={() => console.log('Unisciti a un gruppo')}
+            onPress={showJoinGroupModalWithAnimation}
             style={styles.joinGroupButton}
           >
             Unisciti a un gruppo
@@ -190,14 +331,7 @@ const HomeScreen = ({ navigation }: Props) => {
         </View>
       )}
       
-      {groups.length > 0 && (
-        <FAB
-          style={styles.fab}
-          icon="plus"
-          onPress={openCreateGroupFlow}
-          label="Nuovo Gruppo"
-        />
-      )}
+      {/* FAB removed and replaced with centered button above */}
       
       {/* Profile button moved to CustomHeader */}
 
@@ -206,16 +340,20 @@ const HomeScreen = ({ navigation }: Props) => {
         <Modal
           visible={showConfirmModal}
           onDismiss={() => {
+            // Get keyboard animation duration from platform settings
+            const animationDuration = Platform.OS === 'ios' ? 250 : 300;
+            
             // Animate the modal sliding down and overlay fading out before closing
             Animated.parallel([
               Animated.timing(confirmModalAnim, {
                 toValue: Dimensions.get('window').height,
-                duration: 300,
+                duration: animationDuration,
+                easing: Easing.in(Easing.cubic), // Reverse easing for closing
                 useNativeDriver: true
               }),
               Animated.timing(overlayOpacityAnim, {
                 toValue: 0,
-                duration: 300, // Changed from 500 to 300
+                duration: animationDuration,
                 useNativeDriver: true
               })
             ]).start(() => setShowConfirmModal(false));
@@ -229,16 +367,20 @@ const HomeScreen = ({ navigation }: Props) => {
             <TouchableOpacity
               style={styles.closeButtonContainer}
               onPress={() => {
+                // Get keyboard animation duration from platform settings
+                const animationDuration = Platform.OS === 'ios' ? 250 : 300;
+                
                 // Animate the modal sliding down and overlay fading out before closing
                 Animated.parallel([
                   Animated.timing(confirmModalAnim, {
                     toValue: Dimensions.get('window').height,
-                    duration: 300,
+                    duration: animationDuration,
+                    easing: Easing.in(Easing.cubic), // Reverse easing for closing
                     useNativeDriver: true
                   }),
                   Animated.timing(overlayOpacityAnim, {
                     toValue: 0,
-                    duration: 300, // Changed from 500 to 300 to match modal animation
+                    duration: animationDuration,
                     useNativeDriver: true
                   })
                 ]).start(() => setShowConfirmModal(false));
@@ -258,10 +400,14 @@ const HomeScreen = ({ navigation }: Props) => {
               <Button 
                 mode="contained" 
                 onPress={() => {
+                  // Get keyboard animation duration from platform settings
+                  const animationDuration = Platform.OS === 'ios' ? 250 : 300;
+                  
                   // Animate the modal sliding down before navigating
                   Animated.timing(confirmModalAnim, {
                     toValue: Dimensions.get('window').height,
-                    duration: 300,
+                    duration: animationDuration,
+                    easing: Easing.in(Easing.cubic), // Reverse easing for closing
                     useNativeDriver: true
                   }).start(() => {
                     setShowConfirmModal(false);
@@ -283,16 +429,20 @@ const HomeScreen = ({ navigation }: Props) => {
         <Modal
           visible={showCreateGroupModal}
           onDismiss={() => {
+            // Get keyboard animation duration from platform settings
+            const animationDuration = Platform.OS === 'ios' ? 250 : 300;
+            
             // Animate the modal sliding down and overlay fading out before closing
             Animated.parallel([
               Animated.timing(createModalAnim, {
                 toValue: Dimensions.get('window').height,
-                duration: 300,
+                duration: animationDuration,
+                easing: Easing.in(Easing.cubic), // Reverse easing for closing
                 useNativeDriver: true
               }),
               Animated.timing(overlayOpacityAnim, {
                 toValue: 0,
-                duration: 300, // Changed from 500 to 300 to match modal animation
+                duration: animationDuration,
                 useNativeDriver: true
               })
             ]).start(() => setShowCreateGroupModal(false));
@@ -306,16 +456,20 @@ const HomeScreen = ({ navigation }: Props) => {
             <TouchableOpacity
               style={styles.closeButtonContainer}
               onPress={() => {
+                // Get keyboard animation duration from platform settings
+                const animationDuration = Platform.OS === 'ios' ? 250 : 300;
+                
                 // Animate the modal sliding down and overlay fading out before closing
                 Animated.parallel([
                   Animated.timing(createModalAnim, {
                     toValue: Dimensions.get('window').height,
-                    duration: 300,
+                    duration: animationDuration,
+                    easing: Easing.in(Easing.cubic), // Reverse easing for closing
                     useNativeDriver: true
                   }),
                   Animated.timing(overlayOpacityAnim, {
                     toValue: 0,
-                    duration: 500, // Slightly faster fade-out
+                    duration: animationDuration,
                     useNativeDriver: true
                   })
                 ]).start(() => setShowCreateGroupModal(false));
@@ -353,6 +507,126 @@ const HomeScreen = ({ navigation }: Props) => {
           </Animated.View>
         </Modal>
       </Portal>
+
+      {/* Join Group Modal */}
+      <Portal>
+        <Modal
+          visible={showJoinGroupModal}
+          onDismiss={() => {
+            // Get keyboard animation duration from platform settings
+            const animationDuration = Platform.OS === 'ios' ? 250 : 300;
+            
+            // Animate the modal sliding down and overlay fading out before closing
+            Animated.parallel([
+              Animated.timing(joinModalAnim, {
+                toValue: Dimensions.get('window').height,
+                duration: animationDuration,
+                easing: Easing.in(Easing.cubic), // Reverse easing for closing
+                useNativeDriver: true
+              }),
+              Animated.timing(overlayOpacityAnim, {
+                toValue: 0,
+                duration: animationDuration,
+                useNativeDriver: true
+              })
+            ]).start(() => setShowJoinGroupModal(false));
+          }}
+          style={styles.modalContainer}
+          animationType="none"
+          transparent={true}
+        >
+          <Animated.View style={[styles.modalOverlay, {opacity: overlayOpacityAnim}]}>
+            {/* Close button positioned above the modal */}
+            <TouchableOpacity
+              style={styles.closeButtonContainer}
+              onPress={() => {
+                // Get keyboard animation duration from platform settings
+                const animationDuration = Platform.OS === 'ios' ? 250 : 300;
+                
+                // Animate the modal sliding down and overlay fading out before closing
+                Animated.parallel([
+                  Animated.timing(joinModalAnim, {
+                    toValue: Dimensions.get('window').height,
+                    duration: animationDuration,
+                    easing: Easing.in(Easing.cubic), // Reverse easing for closing
+                    useNativeDriver: true
+                  }),
+                  Animated.timing(overlayOpacityAnim, {
+                    toValue: 0,
+                    duration: animationDuration,
+                    useNativeDriver: true
+                  })
+                ]).start(() => setShowJoinGroupModal(false));
+              }}
+            >
+              <Text style={styles.closeButtonText}>Chiudi</Text>
+            </TouchableOpacity>
+
+            <Animated.View 
+              style={[
+                styles.modalContent, 
+                {
+                  transform: [{translateY: joinModalAnim}],
+                  // Adjust the position when keyboard is visible
+                  marginBottom: keyboardVisible ? keyboardHeight : 0
+                }
+              ]}>
+              <Title style={styles.modalTitle}>Unisciti a un Gruppo</Title>
+              <Text style={styles.modalSubtitle}>Inserisci l'ID del gruppo a cui vuoi unirti</Text>
+              
+              <TextInput
+                label="ID del Gruppo *"
+                value={groupId}
+                onChangeText={setGroupId}
+                mode="outlined"
+                style={styles.input}
+                right={<TextInput.Icon 
+                  icon="content-paste" 
+                  onPress={async () => {
+                    try {
+                      const clipboardContent = await Clipboard.getString();
+                      if (clipboardContent) {
+                        setGroupId(clipboardContent);
+                        setError('');
+                        // Show a temporary success message
+                        setError('ID incollato dagli appunti!');
+                        // Clear the message after 2 seconds
+                        setTimeout(() => setError(''), 2000);
+                      }
+                    } catch (err) {
+                      console.error('Error pasting from clipboard:', err);
+                      setError('Errore durante l\'incollaggio dagli appunti');
+                    }
+                  }} 
+                />}
+              />
+              
+              {error ? <Text style={[styles.errorText, error.includes('incollato') ? styles.successText : null]}>{error}</Text> : null}
+              
+              <Button
+                mode="contained"
+                onPress={handleJoinGroup}
+                loading={joinLoading}
+                disabled={joinLoading}
+                style={styles.createButton}
+                labelStyle={styles.createButtonLabel}
+              >
+                Unisciti
+              </Button>
+            </Animated.View>
+          </Animated.View>
+        </Modal>
+      </Portal>
+
+      {/* Add Snackbar for feedback */}
+      <Snackbar
+        visible={snackbarVisible}
+        onDismiss={() => setSnackbarVisible(false)}
+        duration={3000}
+        style={styles.snackbar}
+      >
+        {snackbarMessage}
+      </Snackbar>
     </View>
   );
 };
@@ -467,7 +741,22 @@ const styles = StyleSheet.create({
     zIndex: 10,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  newGroupButtonContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 20,
     width: '100%',
+  },
+  newGroupButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    width: '60%',
+    borderRadius: 25,
+  },
+  newGroupButtonLabel: {
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   closeButton: {
     backgroundColor: 'white',
@@ -517,9 +806,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   errorText: {
-    color: 'red',
-    marginBottom: 10,
+    color: '#FF5252',
+    marginVertical: 8,
     textAlign: 'center',
+  },
+  successText: {
+    color: '#4CAF50',
+    marginVertical: 8,
+    textAlign: 'center',
+  },
+  snackbar: {
+    bottom: 20,
   },
 });
 

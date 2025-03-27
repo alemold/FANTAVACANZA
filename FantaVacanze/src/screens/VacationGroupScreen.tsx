@@ -24,11 +24,20 @@ interface Participant {
   isAdmin: boolean;
 }
 
-interface Activity {
+interface Challenge {
+  id: string;
+  description: string;
+  points: number;
+  category_id: string;
+  is_active: boolean;
+  status?: string; // positive or negative
+  category_name?: string; // Added to display category name
+}
+
+interface ChallengeCategory {
   id: string;
   name: string;
-  points: number;
-  date: string;
+  challenges: Challenge[];
 }
 
 interface VacationGroup {
@@ -39,17 +48,10 @@ interface VacationGroup {
   endDate: string;
   description: string;
   participants: Participant[];
-  activities: Activity[];
+  challenges?: Challenge[];
+  challengeCategories?: ChallengeCategory[];
+  groupCode?: string;
 }
-
-// Default activities for now (these would also come from the database in a complete implementation)
-const defaultActivities = [
-  { id: '1', name: 'Escursione in barca', points: 30, date: '16/07/2023' },
-  { id: '2', name: 'Snorkeling', points: 20, date: '17/07/2023' },
-  { id: '3', name: 'Trekking', points: 25, date: '18/07/2023' },
-  { id: '4', name: 'Beach volley', points: 15, date: '19/07/2023' },
-  { id: '5', name: 'Serata karaoke', points: 10, date: '20/07/2023' },
-];
 
 const VacationGroupScreen = ({ navigation, route }: Props) => {
   const { groupId } = route.params;
@@ -63,7 +65,7 @@ const VacationGroupScreen = ({ navigation, route }: Props) => {
   const [snackbarVisible, setSnackbarVisible] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
 
-  // Fetch the vacation group details and participants from the database
+  // Fetch the vacation group details, participants, and challenges from the database
   useEffect(() => {
     const fetchGroupData = async () => {
       try {
@@ -76,6 +78,9 @@ const VacationGroupScreen = ({ navigation, route }: Props) => {
         // Fetch participants
         const participantsResponse = await groupService.getGroupParticipants(groupId);
         
+        // Fetch group challenges
+        const challengesResponse = await groupService.getGroupChallenges(groupId);
+        
         if (groupResponse.group && participantsResponse.participants) {
           // Map the participants data to match our component's expected format
           const mappedParticipants = participantsResponse.participants.map((participant: any) => ({
@@ -86,23 +91,48 @@ const VacationGroupScreen = ({ navigation, route }: Props) => {
             isAdmin: participant.role === 'admin'
           }));
           
+          // Organize challenges by category
+          const challenges = challengesResponse?.challenges || [];
+          const categoriesMap: Record<string, ChallengeCategory> = {};
+          
+          // First, create a map of categories
+          challenges.forEach((challenge: Challenge) => {
+            const categoryId = challenge.category_id;
+            const categoryName = challenge.category_name || 'Altre sfide';
+            
+            if (!categoriesMap[categoryId]) {
+              categoriesMap[categoryId] = {
+                id: categoryId,
+                name: categoryName,
+                challenges: []
+              };
+            }
+            
+            categoriesMap[categoryId].challenges.push(challenge);
+          });
+          
+          // Convert the map to an array
+          const challengeCategories = Object.values(categoriesMap);
+          
           // Create the vacation group object with the fetched data
           setVacationGroup({
             id: groupResponse.group.id,
             name: groupResponse.group.name,
-            location: 'Sardegna, Italia', // This would come from the database in a complete implementation
-            startDate: '15/07/2023', // This would come from the database in a complete implementation
-            endDate: '22/07/2023', // This would come from the database in a complete implementation
-            description: 'Una settimana di relax e divertimento in Sardegna con gli amici!', // This would come from the database
+            location: groupResponse.group.location || 'Sardegna, Italia',
+            startDate: groupResponse.group.start_date || '15/07/2023',
+            endDate: groupResponse.group.end_date || '22/07/2023',
+            description: groupResponse.group.description || 'Una settimana di relax e divertimento in Sardegna con gli amici!',
             participants: mappedParticipants,
-            activities: defaultActivities // Using default activities for now
+            challenges: challenges,
+            challengeCategories: challengeCategories,
+            groupCode: groupResponse.group.group_id // Store the group_id
           });
         } else {
           setError('Errore nel caricamento dei dati del gruppo');
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error('Error fetching group data:', err);
-        setError('Errore nel caricamento dei dati del gruppo');
+        setError(err.message || 'Errore nel caricamento dei dati del gruppo');
       } finally {
         setLoading(false);
       }
@@ -134,15 +164,26 @@ const VacationGroupScreen = ({ navigation, route }: Props) => {
     );
   };
 
-  const renderActivity = ({ item }: { item: Activity }) => {
+  // Render a challenge item
+  const renderChallenge = ({ item }: { item: Challenge }) => {
     if (!vacationGroup) return null;
     
+    // Determine if points should be displayed with a plus or minus sign based on status
+    const pointsDisplay = item.status === 'negative' ? 
+      `-${item.points} punti` : 
+      `+${item.points} punti`;
+    
+    // Determine the color based on status
+    const pointsColor = item.status === 'negative' ? 
+      '#FF5252' : // Red for negative points
+      '#4CAF50'; // Green for positive points
+    
     return (
-      <Card style={styles.activityCard}>
+      <Card style={styles.challengeCard}>
         <Card.Content>
-          <Title style={styles.activityTitle}>{item.name}</Title>
-          <Paragraph>Data: {item.date}</Paragraph>
-          <Paragraph style={styles.activityPoints}>{item.points} punti</Paragraph>
+          <Title style={styles.challengeTitle}>{item.description}</Title>
+          {item.category_name && <Paragraph>Categoria: {item.category_name}</Paragraph>}
+          <Paragraph style={[styles.challengePoints, { color: pointsColor }]}>{pointsDisplay}</Paragraph>
         </Card.Content>
       </Card>
     );
@@ -212,6 +253,15 @@ const VacationGroupScreen = ({ navigation, route }: Props) => {
     Clipboard.setString(inviteLink);
     setSnackbarMessage('Link copiato negli appunti!');
     setSnackbarVisible(true);
+  };
+
+  // Function to copy the group code to clipboard
+  const copyGroupCodeToClipboard = () => {
+    if (vacationGroup?.groupCode) {
+      Clipboard.setString(vacationGroup.groupCode);
+      setSnackbarMessage('ID del gruppo copiato negli appunti!');
+      setSnackbarVisible(true);
+    }
   };
 
   return (
@@ -306,16 +356,59 @@ const VacationGroupScreen = ({ navigation, route }: Props) => {
 
       <Divider style={styles.divider} />
 
+      {/* Add group code display for admin */}
+      {vacationGroup && vacationGroup.participants.some(p => p.isAdmin) && (
+        <Card style={styles.groupCodeCard}>
+          <Card.Content>
+            <Title style={styles.groupCodeTitle}>ID Gruppo</Title>
+            <View style={styles.groupCodeContainer}>
+              <Text style={styles.groupCode}>{vacationGroup.groupCode}</Text>
+              <IconButton
+                icon="content-copy"
+                size={20}
+                onPress={copyGroupCodeToClipboard}
+              />
+            </View>
+            <Text style={styles.groupCodeHelp}>
+              Condividi questo ID con i tuoi amici per farli unire al gruppo
+            </Text>
+          </Card.Content>
+        </Card>
+      )}
+
       <View style={styles.section}>
-        <Title style={styles.sectionTitle}>Attività</Title>
-        <FlatList
-          data={vacationGroup?.activities || []}
-          renderItem={renderActivity}
-          keyExtractor={(item) => item.id}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.activitiesContainer}
-        />
+        <Title style={styles.sectionTitle}>Sfide del Gruppo</Title>
+        {vacationGroup?.challengeCategories && vacationGroup.challengeCategories.length > 0 ? (
+          <View>
+            {vacationGroup.challengeCategories.map((category) => (
+              <View key={category.id} style={styles.categorySection}>
+                <Text style={styles.categoryTitle}>{category.name}</Text>
+                <FlatList
+                  data={category.challenges}
+                  renderItem={renderChallenge}
+                  keyExtractor={(item) => item.id.toString()}
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.challengesContainer}
+                />
+                <Divider style={styles.categoryDivider} />
+              </View>
+            ))}
+          </View>
+        ) : (
+          <Card style={styles.emptyCard}>
+            <Card.Content>
+              <Paragraph style={styles.emptyText}>Nessuna sfida selezionata per questo gruppo.</Paragraph>
+              <Button 
+                mode="contained" 
+                onPress={() => navigation.navigate('ChallengeSelection', { groupId, groupName: vacationGroup?.name })}
+                style={styles.addButton}
+              >
+                Aggiungi Sfide
+              </Button>
+            </Card.Content>
+          </Card>
+        )}
       </View>
 
       <View style={styles.buttonsContainer}>
@@ -376,6 +469,22 @@ const styles = StyleSheet.create({
     fontSize: 20,
     marginBottom: 8,
   },
+  categorySection: {
+    marginBottom: 16,
+  },
+  categoryTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#2196F3',
+    marginVertical: 8,
+    paddingLeft: 8,
+  },
+  categoryDivider: {
+    marginTop: 12,
+    marginBottom: 4,
+    height: 1,
+    backgroundColor: '#e0e0e0',
+  },
   participantRank: {
     fontSize: 18,
     fontWeight: 'bold',
@@ -387,18 +496,31 @@ const styles = StyleSheet.create({
   activitiesContainer: {
     paddingRight: 16,
   },
-  activityCard: {
-    width: 200,
+
+  challengeCard: {
+    width: 250,
     marginRight: 12,
     marginVertical: 8,
   },
-  activityTitle: {
+  challengeTitle: {
     fontSize: 16,
   },
-  activityPoints: {
+  challengePoints: {
     fontWeight: 'bold',
-    color: '#2196F3',
-    marginTop: 4,
+    marginTop: 5,
+  },
+  challengesContainer: {
+    paddingRight: 16,
+  },
+  emptyCard: {
+    marginVertical: 8,
+  },
+  emptyText: {
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  addButton: {
+    marginTop: 10,
   },
   buttonsContainer: {
     flexDirection: 'row',
@@ -468,6 +590,33 @@ const styles = StyleSheet.create({
   },
   snackbar: {
     bottom: 20,
+  },
+  groupCodeCard: {
+    marginTop: 10,
+    marginBottom: 10,
+  },
+  groupCodeTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  groupCodeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#f5f5f5',
+    borderRadius: 4,
+    padding: 8,
+    marginVertical: 8,
+  },
+  groupCode: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    letterSpacing: 1,
+  },
+  groupCodeHelp: {
+    fontSize: 12,
+    color: '#666',
+    fontStyle: 'italic',
   },
 });
 
