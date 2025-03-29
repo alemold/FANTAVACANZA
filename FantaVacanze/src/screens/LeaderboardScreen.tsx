@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, StyleSheet, FlatList } from 'react-native';
 import { Text, Card, Avatar, Title, Paragraph, Divider, List, Surface } from 'react-native-paper';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList } from '../navigation/AppNavigator';
+import { useFocusEffect } from '@react-navigation/native';
+import { groupService } from '../services/api'; // Add this import
 
 type LeaderboardScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Leaderboard'>;
 type LeaderboardScreenRouteProp = RouteProp<RootStackParamList, 'Leaderboard'>;
@@ -27,16 +29,27 @@ const LeaderboardScreen = ({ navigation, route }: Props) => {
   const [participants, setParticipants] = useState(mockParticipants);
   const [loading, setLoading] = useState(false);
 
-  // In a real app, you would fetch the participants from your MySQL database
-  useEffect(() => {
-    // Simulating data fetching
-    setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      // Here you would fetch the actual participants data based on groupId
-      // For now, we're using mock data
-    }, 1000);
-  }, [groupId]);
+  // Replace existing useEffect with useFocusEffect
+  useFocusEffect(
+    useCallback(() => {
+      const fetchParticipants = async () => {
+        try {
+          setLoading(true);
+          // In a real implementation, fetch participants from your API
+          const response = await groupService.getGroupParticipants(groupId);
+          if (response && response.participants) {
+            setParticipants(response.participants);
+          }
+        } catch (err) {
+          console.error('Error fetching participants:', err);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      fetchParticipants();
+    }, [groupId])
+  );
 
   const renderTopThree = () => {
     const topThree = [...participants].slice(0, 3);
@@ -58,16 +71,29 @@ const LeaderboardScreen = ({ navigation, route }: Props) => {
                 isThird ? styles.thirdPlace : null,
               ]}
             >
-              <Avatar.Text 
-                size={isFirst ? 80 : 60} 
-                label={participant.name.split(' ').map(n => n[0]).join('')}
-                style={[
-                  styles.avatar,
-                  isFirst ? styles.firstAvatar : null,
-                  isSecond ? styles.secondAvatar : null,
-                  isThird ? styles.thirdAvatar : null,
-                ]}
-              />
+              {participant.avatar ? (
+                <Avatar.Image 
+                  size={isFirst ? 80 : 60}
+                  source={{ uri: participant.avatar }}
+                  style={[
+                    styles.avatar,
+                    isFirst ? styles.firstAvatar : null,
+                    isSecond ? styles.secondAvatar : null,
+                    isThird ? styles.thirdAvatar : null,
+                  ]}
+                />
+              ) : (
+                <Avatar.Text 
+                  size={isFirst ? 80 : 60} 
+                  label={participant.name.split(' ').map(n => n[0]).join('')}
+                  style={[
+                    styles.avatar,
+                    isFirst ? styles.firstAvatar : null,
+                    isSecond ? styles.secondAvatar : null,
+                    isThird ? styles.thirdAvatar : null,
+                  ]}
+                />
+              )}
               <Text style={styles.podiumName}>{participant.name}</Text>
               <Surface style={styles.pointsBadge}>
                 <Text style={styles.pointsText}>{participant.points} pts</Text>
@@ -89,9 +115,18 @@ const LeaderboardScreen = ({ navigation, route }: Props) => {
         title={item.name}
         description={`${item.activities} attività completate`}
         left={props => (
-          <View style={styles.rankContainer}>
-            <Text {...props} style={styles.rank}>{index + 1}°</Text>
-          </View>
+          item.avatar ? (
+            <Avatar.Image
+              {...props}
+              size={40}
+              source={{ uri: item.avatar }}
+              style={{ marginRight: 8 }}
+            />
+          ) : (
+            <View style={styles.rankContainer}>
+              <Text {...props} style={styles.rank}>{index + 1}°</Text>
+            </View>
+          )
         )}
         right={props => (
           <Text {...props} style={styles.listPoints}>{item.points} pts</Text>

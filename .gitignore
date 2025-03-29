@@ -51,4 +51,4 @@ backend/node_modules/
 build/
 
 # Database
-data.sql
+backup.sql

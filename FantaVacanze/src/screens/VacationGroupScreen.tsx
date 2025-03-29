@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, FlatList, ActivityIndicator, Share, Clipboard, Platform, Linking } from 'react-native';
 import CustomHeader from '../components/CustomHeader';
 import { Text, Card, Button, Title, Paragraph, Avatar, List, Divider, IconButton, Modal, Portal, TextInput, Snackbar } from 'react-native-paper';
 import { StackNavigationProp } from '@react-navigation/stack';
-import { RouteProp } from '@react-navigation/native';
+import { RouteProp, useFocusEffect } from '@react-navigation/native';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { groupService } from '../services/api';
 
@@ -64,82 +64,91 @@ const VacationGroupScreen = ({ navigation, route }: Props) => {
   const [inviteLoading, setInviteLoading] = useState(false);
   const [snackbarVisible, setSnackbarVisible] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [selectedCategoryIndex, setSelectedCategoryIndex] = useState(0);
+  const [activeTab, setActiveTab] = useState<'participants' | 'challenges' | 'invite'>('participants');
 
   // Fetch the vacation group details, participants, and challenges from the database
-  useEffect(() => {
-    const fetchGroupData = async () => {
-      try {
-        setLoading(true);
-        setError('');
-        
-        // Fetch group details
-        const groupResponse = await groupService.getGroupById(groupId);
-        
-        // Fetch participants
-        const participantsResponse = await groupService.getGroupParticipants(groupId);
-        
-        // Fetch group challenges
-        const challengesResponse = await groupService.getGroupChallenges(groupId);
-        
-        if (groupResponse.group && participantsResponse.participants) {
-          // Map the participants data to match our component's expected format
-          const mappedParticipants = participantsResponse.participants.map((participant: any) => ({
-            id: participant.user_id.toString(),
-            name: participant.username || `User ${participant.user_id}`,
-            points: participant.points || 0,
-            avatar: participant.avatar_url,
-            isAdmin: participant.role === 'admin'
-          }));
+  useFocusEffect(
+    useCallback(() => {
+      const fetchGroupData = async () => {
+        try {
+          setLoading(true);
+          setError('');
           
-          // Organize challenges by category
-          const challenges = challengesResponse?.challenges || [];
-          const categoriesMap: Record<string, ChallengeCategory> = {};
+          // Fetch group details
+          const groupResponse = await groupService.getGroupById(groupId);
           
-          // First, create a map of categories
-          challenges.forEach((challenge: Challenge) => {
-            const categoryId = challenge.category_id;
-            const categoryName = challenge.category_name || 'Altre sfide';
+          // Fetch participants
+          const participantsResponse = await groupService.getGroupParticipants(groupId);
+          
+          // Fetch group challenges
+          const challengesResponse = await groupService.getGroupChallenges(groupId);
+          
+          if (groupResponse.group && participantsResponse.participants) {
+            // Map the participants data to match our component's expected format
+            const mappedParticipants = participantsResponse.participants.map((participant: any) => ({
+              id: participant.user_id.toString(),
+              name: participant.username || `User ${participant.user_id}`,
+              points: participant.points || 0, // This already comes from group_users table
+              avatar: participant.avatar_url,
+              isAdmin: participant.role === 'admin'
+            }));
             
-            if (!categoriesMap[categoryId]) {
-              categoriesMap[categoryId] = {
-                id: categoryId,
-                name: categoryName,
-                challenges: []
-              };
-            }
+            // Organize challenges by category
+            const challenges = challengesResponse?.challenges || [];
+            const categoriesMap: Record<string, ChallengeCategory> = {};
             
-            categoriesMap[categoryId].challenges.push(challenge);
-          });
-          
-          // Convert the map to an array
-          const challengeCategories = Object.values(categoriesMap);
-          
-          // Create the vacation group object with the fetched data
-          setVacationGroup({
-            id: groupResponse.group.id,
-            name: groupResponse.group.name,
-            location: groupResponse.group.location || 'Sardegna, Italia',
-            startDate: groupResponse.group.start_date || '15/07/2023',
-            endDate: groupResponse.group.end_date || '22/07/2023',
-            description: groupResponse.group.description || 'Una settimana di relax e divertimento in Sardegna con gli amici!',
-            participants: mappedParticipants,
-            challenges: challenges,
-            challengeCategories: challengeCategories,
-            groupCode: groupResponse.group.group_id // Store the group_id
-          });
-        } else {
-          setError('Errore nel caricamento dei dati del gruppo');
+            // First, create a map of categories
+            challenges.forEach((challenge: Challenge) => {
+              const categoryId = challenge.category_id;
+              const categoryName = challenge.category_name || 'Altre sfide';
+              
+              if (!categoriesMap[categoryId]) {
+                categoriesMap[categoryId] = {
+                  id: categoryId,
+                  name: categoryName,
+                  challenges: []
+                };
+              }
+              
+              categoriesMap[categoryId].challenges.push(challenge);
+            });
+            
+            // Convert the map to an array
+            const challengeCategories = Object.values(categoriesMap);
+            
+            // Create the vacation group object with the fetched data
+            setVacationGroup({
+              id: groupResponse.group.id,
+              name: groupResponse.group.name,
+              location: groupResponse.group.location || 'Sardegna, Italia',
+              startDate: groupResponse.group.start_date || '15/07/2023',
+              endDate: groupResponse.group.end_date || '22/07/2023',
+              description: groupResponse.group.description || 'Una settimana di relax e divertimento in Sardegna con gli amici!',
+              participants: mappedParticipants,
+              challenges: challenges,
+              challengeCategories: challengeCategories,
+              groupCode: groupResponse.group.group_id // Store the group_id
+            });
+          } else {
+            setError('Errore nel caricamento dei dati del gruppo');
+          }
+        } catch (err: any) {
+          console.error('Error fetching group data:', err);
+          setError(err.message || 'Errore nel caricamento dei dati del gruppo');
+        } finally {
+          setLoading(false);
         }
-      } catch (err: any) {
-        console.error('Error fetching group data:', err);
-        setError(err.message || 'Errore nel caricamento dei dati del gruppo');
-      } finally {
-        setLoading(false);
-      }
-    };
-    
-    fetchGroupData();
-  }, [groupId]);
+      };
+      
+      fetchGroupData();
+      
+      // Return cleanup function if needed
+      return () => {
+        // Any cleanup code here
+      };
+    }, [groupId])  // Dependency on groupId
+  );
 
   const renderParticipant = ({ item }: { item: Participant }) => {
     if (!vacationGroup) return null;
@@ -149,17 +158,26 @@ const VacationGroupScreen = ({ navigation, route }: Props) => {
         title={item.name}
         description={`${item.points} punti`}
         left={props => (
-          <Avatar.Text 
-            {...props} 
-            size={40} 
-            label={item.name.split(' ').map(n => n[0]).join('')} 
-          />
+          item.avatar ? (
+            <Avatar.Image 
+              {...props} 
+              size={40} 
+              source={{ uri: item.avatar }}
+            />
+          ) : (
+            <Avatar.Text 
+              {...props} 
+              size={40} 
+              label={item.name.split(' ').map(n => n[0]).join('')} 
+            />
+          )
         )}
         right={props => (
           <Text {...props} style={styles.participantRank}>
             {vacationGroup.participants.sort((a, b) => b.points - a.points).findIndex(p => p.id === item.id) + 1}°
           </Text>
         )}
+        onPress={() => navigation.navigate('UserProfile', { userId: item.id, groupId })}
       />
     );
   };
@@ -272,6 +290,38 @@ const VacationGroupScreen = ({ navigation, route }: Props) => {
         groupId={groupId} 
         groupName={vacationGroup.name} 
       />
+      
+      {/* Tab Navigation */}
+      <View style={styles.tabContainer}>
+        <Button
+          mode={activeTab === 'participants' ? 'contained' : 'text'}
+          onPress={() => setActiveTab('participants')}
+          icon="account-group"
+          style={[styles.tabButton, activeTab === 'participants' && styles.activeTabButton]}
+          labelStyle={activeTab === 'participants' ? styles.activeTabLabel : styles.tabLabel}
+        >
+          Partecipanti
+        </Button>
+        <Button
+          mode={activeTab === 'challenges' ? 'contained' : 'text'}
+          onPress={() => setActiveTab('challenges')}
+          icon="trophy"
+          style={[styles.tabButton, activeTab === 'challenges' && styles.activeTabButton]}
+          labelStyle={activeTab === 'challenges' ? styles.activeTabLabel : styles.tabLabel}
+        >
+          Sfide
+        </Button>
+        <Button
+          mode={activeTab === 'invite' ? 'contained' : 'text'}
+          onPress={() => setActiveTab('invite')}
+          icon="account-plus"
+          style={[styles.tabButton, activeTab === 'invite' && styles.activeTabButton]}
+          labelStyle={activeTab === 'invite' ? styles.activeTabLabel : styles.tabLabel}
+        >
+          Invita
+        </Button>
+      </View>
+      
       <ScrollView style={styles.container}>
       
       {/* Invitation Modal */}
@@ -323,93 +373,213 @@ const VacationGroupScreen = ({ navigation, route }: Props) => {
       >
         {snackbarMessage}
       </Snackbar>
-      <View style={styles.section}>
-        <Title style={styles.sectionTitle}>Partecipanti</Title>
-        {vacationGroup && vacationGroup.participants.length === 1 && vacationGroup.participants[0].isAdmin ? (
-          <Card style={styles.inviteCard}>
-            <Card.Content style={styles.inviteCardContent}>
-              <Text style={styles.inviteText}>Invita i tuoi amici al tuo gruppo per iniziare a sfidarvi✌️</Text>
-              <Button 
-                mode="contained" 
-                icon="account-plus"
-                onPress={() => {
-                  setInviteLoading(true);
-                  generateInviteLink();
-                }}
-                style={styles.inviteButton}
-                loading={inviteLoading}
-                disabled={inviteLoading}
-              >
-                + invita gli amici
-              </Button>
-            </Card.Content>
-          </Card>
-        ) : (
-          <FlatList
-            data={vacationGroup.participants.sort((a, b) => b.points - a.points)}
-            renderItem={renderParticipant}
-            keyExtractor={(item) => item.id}
-            scrollEnabled={false}
-          />
-        )}
-      </View>
-
-      <Divider style={styles.divider} />
-
-      {/* Add group code display for admin */}
-      {vacationGroup && vacationGroup.participants.some(p => p.isAdmin) && (
-        <Card style={styles.groupCodeCard}>
-          <Card.Content>
-            <Title style={styles.groupCodeTitle}>ID Gruppo</Title>
-            <View style={styles.groupCodeContainer}>
-              <Text style={styles.groupCode}>{vacationGroup.groupCode}</Text>
-              <IconButton
-                icon="content-copy"
-                size={20}
-                onPress={copyGroupCodeToClipboard}
-              />
-            </View>
-            <Text style={styles.groupCodeHelp}>
-              Condividi questo ID con i tuoi amici per farli unire al gruppo
-            </Text>
-          </Card.Content>
-        </Card>
+      {/* Participants Tab Content */}
+      {activeTab === 'participants' && (
+        <View style={styles.section}>
+          <Title style={styles.sectionTitle}>Partecipanti</Title>
+          {vacationGroup && vacationGroup.participants.length === 1 && vacationGroup.participants[0].isAdmin ? (
+            <Card style={styles.inviteCard}>
+              <Card.Content style={styles.inviteCardContent}>
+                <Text style={styles.inviteText}>Non ci sono ancora partecipanti nel gruppo!</Text>
+                <Button 
+                  mode="contained" 
+                  icon="account-plus"
+                  onPress={() => setActiveTab('invite')}
+                  style={styles.inviteButton}
+                >
+                  Vai alla schermata Invita
+                </Button>
+              </Card.Content>
+            </Card>
+          ) : (
+            <FlatList
+              data={vacationGroup.participants.sort((a, b) => b.points - a.points)}
+              renderItem={renderParticipant}
+              keyExtractor={(item) => item.id}
+              scrollEnabled={false}
+            />
+          )}
+        </View>
       )}
 
-      <View style={styles.section}>
-        <Title style={styles.sectionTitle}>Sfide del Gruppo</Title>
-        {vacationGroup?.challengeCategories && vacationGroup.challengeCategories.length > 0 ? (
-          <View>
-            {vacationGroup.challengeCategories.map((category) => (
-              <View key={category.id} style={styles.categorySection}>
-                <Text style={styles.categoryTitle}>{category.name}</Text>
-                <FlatList
-                  data={category.challenges}
-                  renderItem={renderChallenge}
-                  keyExtractor={(item) => item.id.toString()}
-                  horizontal
+      {/* Challenges Tab Content */}
+      {activeTab === 'challenges' && (
+        <View style={styles.section}>
+          <Title style={styles.sectionTitle}>Sfide del Gruppo</Title>
+          {vacationGroup?.challengeCategories && vacationGroup.challengeCategories.length > 0 ? (
+            <Card style={styles.challengesCard}>
+              <Card.Content style={styles.challengesCardContent}>
+                {/* Tabs for categories */}
+                <ScrollView 
+                  horizontal 
                   showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.challengesContainer}
-                />
-                <Divider style={styles.categoryDivider} />
-              </View>
-            ))}
-          </View>
-        ) : (
-          <Card style={styles.emptyCard}>
-            <Card.Content>
-              <Paragraph style={styles.emptyText}>Nessuna sfida selezionata per questo gruppo.</Paragraph>
-              <Button 
-                mode="contained" 
-                onPress={() => navigation.navigate('ChallengeSelection', { groupId, groupName: vacationGroup?.name })}
-                style={styles.addButton}
-              >
-                Aggiungi Sfide
-              </Button>
-            </Card.Content>
-          </Card>
-        )}
-      </View>
+                  contentContainerStyle={styles.tabsContainer}
+                >
+                  {vacationGroup.challengeCategories.map((category, index) => (
+                    <Button 
+                      key={category.id} 
+                      mode={index === selectedCategoryIndex ? "contained" : "outlined"}
+                      style={[styles.categoryTab, index === selectedCategoryIndex && styles.selectedCategoryTab]}
+                      labelStyle={[styles.categoryTabLabel, index === selectedCategoryIndex && styles.selectedCategoryTabLabel]}
+                      onPress={() => setSelectedCategoryIndex(index)}
+                    >
+                      {category.name}
+                    </Button>
+                  ))}
+                </ScrollView>
+                
+                {/* Challenge grid */}
+                {/* Complete Challenge Button */}
+                <Button
+                  mode="contained"
+                  icon="check-circle"
+                  onPress={() => navigation.navigate('ChallengeCompletion', { groupId })}
+                  style={styles.completeButton}
+                >
+                  Completa una Sfida
+                </Button>
+
+                <View style={styles.challengeGrid}>
+                  {vacationGroup.challengeCategories[selectedCategoryIndex]?.challenges.map((challenge) => {
+                    // Determine if points should be displayed with a plus or minus sign based on status
+                    const pointsDisplay = challenge.status === 'negative' ? 
+                      `-${challenge.points} punti` : 
+                      `+${challenge.points} punti`;
+                    
+                    // Determine the color based on status
+                    const pointsColor = challenge.status === 'negative' ? 
+                      '#FF5252' : // Red for negative points
+                      '#4CAF50'; // Green for positive points
+                      
+                    // Determine icon based on category or points
+                    let challengeIcon = 'trophy';
+                    
+                    // Assign different icons based on category name or challenge description
+                    if (challenge.status === 'negative') {
+                      challengeIcon = 'thumb-down';
+                    } else if (challenge.description.toLowerCase().includes('foto') || 
+                               challenge.description.toLowerCase().includes('selfie') ||
+                               challenge.description.toLowerCase().includes('immagine')) {
+                      challengeIcon = 'camera';
+                    } else if (challenge.description.toLowerCase().includes('cibo') ||
+                               challenge.description.toLowerCase().includes('mangia') ||
+                               challenge.description.toLowerCase().includes('bevi')) {
+                      challengeIcon = 'food';
+                    } else if (challenge.description.toLowerCase().includes('nuota') ||
+                               challenge.description.toLowerCase().includes('mare') ||
+                               challenge.description.toLowerCase().includes('spiaggia')) {
+                      challengeIcon = 'swim';
+                    } else if (challenge.description.toLowerCase().includes('escursione') ||
+                               challenge.description.toLowerCase().includes('cammina') ||
+                               challenge.description.toLowerCase().includes('visita')) {
+                      challengeIcon = 'hiking';
+                    }
+                    
+                    return (
+                      <Card key={challenge.id} style={styles.challengeGridCard}>
+                        <Card.Content style={styles.challengeGridCardContent}>
+                          <View style={styles.challengeIconContainer}>
+                            <Avatar.Icon size={40} icon={challengeIcon} style={{
+                              backgroundColor: pointsColor + '20' // Add transparency
+                            }} color={pointsColor} />
+                          </View>
+                          <Text style={styles.challengeGridTitle}>{challenge.description}</Text>
+                          <Text style={[styles.challengeGridPoints, { color: pointsColor }]}>
+                            {pointsDisplay}
+                          </Text>
+                        </Card.Content>
+                      </Card>
+                    );
+                  })}
+                </View>
+              </Card.Content>
+            </Card>
+          ) : (
+            <Card style={styles.emptyCard}>
+              <Card.Content>
+                <Paragraph style={styles.emptyText}>Nessuna sfida selezionata per questo gruppo.</Paragraph>
+                <Button 
+                  mode="contained" 
+                  onPress={() => navigation.navigate('ChallengeSelection', { groupId, groupName: vacationGroup?.name })}
+                  style={styles.addButton}
+                >
+                  Aggiungi Sfide
+                </Button>
+              </Card.Content>
+            </Card>
+          )}
+        </View>
+      )}
+
+      {/* Invite Tab Content */}
+      {activeTab === 'invite' && (
+        <View style={styles.section}>
+          <Title style={styles.sectionTitle}>Invita Amici</Title>
+          {vacationGroup && vacationGroup.participants.length === 1 && vacationGroup.participants[0].isAdmin ? (
+            <Card style={styles.inviteCard}>
+              <Card.Content style={styles.inviteCardContent}>
+                <Text style={styles.inviteText}>Non hai ancora invitato nessuno! Invita i tuoi amici al tuo gruppo per iniziare a sfidarvi✌️</Text>
+                <Button 
+                  mode="contained" 
+                  icon="account-plus"
+                  onPress={() => {
+                    setInviteLoading(true);
+                    generateInviteLink();
+                  }}
+                  style={styles.inviteButton}
+                  loading={inviteLoading}
+                  disabled={inviteLoading}
+                >
+                  Genera Link di Invito
+                </Button>
+              </Card.Content>
+            </Card>
+          ) : (
+            <Card style={styles.inviteCard}>
+              <Card.Content style={styles.inviteCardContent}>
+                <Text style={styles.inviteText}>Invita i tuoi amici al tuo gruppo per iniziare a sfidarvi✌️</Text>
+                <Button 
+                  mode="contained" 
+                  icon="account-plus"
+                  onPress={() => {
+                    setInviteLoading(true);
+                    generateInviteLink();
+                  }}
+                  style={styles.inviteButton}
+                  loading={inviteLoading}
+                  disabled={inviteLoading}
+                >
+                  Genera Link di Invito
+                </Button>
+              </Card.Content>
+            </Card>
+          )}
+
+          {/* Add group code display for admin */}
+          {vacationGroup && vacationGroup.participants.some(p => p.isAdmin) && (
+            <Card style={styles.groupCodeCard}>
+              <Card.Content style={styles.groupCodeContent}>
+                <Title style={styles.groupCodeTitle}>ID Gruppo</Title>
+                <View style={styles.groupCodeContainer}>
+                  <Text style={styles.groupCode}>{vacationGroup.groupCode}</Text>
+                  <Button 
+                    mode="contained" 
+                    icon="content-copy"
+                    onPress={copyGroupCodeToClipboard}
+                    style={styles.copyButton}
+                    labelStyle={styles.copyButtonLabel}
+                  >
+                    Copia
+                  </Button>
+                </View>
+                <Text style={styles.groupCodeHelp}>
+                  Condividi questo ID con i tuoi amici per farli unire al gruppo
+                </Text>
+              </Card.Content>
+            </Card>
+          )}
+        </View>
+      )}
 
       <View style={styles.buttonsContainer}>
         <Button 
@@ -433,6 +603,37 @@ const VacationGroupScreen = ({ navigation, route }: Props) => {
 };
 
 const styles = StyleSheet.create({
+  tabContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    backgroundColor: '#fff',
+    elevation: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+  },
+  completeButton: {
+    marginVertical: 16,
+    marginHorizontal: 8,
+    backgroundColor: '#4CAF50',
+  },
+  tabButton: {
+    flex: 1,
+    borderRadius: 0,
+    margin: 0,
+    borderWidth: 0,
+  },
+  activeTabButton: {
+    backgroundColor: '#2196F3',
+  },
+  tabLabel: {
+    fontSize: 12,
+    color: '#555',
+  },
+  activeTabLabel: {
+    fontSize: 12,
+    color: '#fff',
+    fontWeight: 'bold',
+  },
   containerWrapper: {
     flex: 1,
     backgroundColor: '#f5f5f5',
@@ -497,20 +698,77 @@ const styles = StyleSheet.create({
     paddingRight: 16,
   },
 
-  challengeCard: {
-    width: 250,
-    marginRight: 12,
+  challengesCard: {
     marginVertical: 8,
+    borderRadius: 12,
+    elevation: 4,
+    overflow: 'hidden',
   },
-  challengeTitle: {
-    fontSize: 16,
+  challengesCardContent: {
+    padding: 8,
   },
-  challengePoints: {
+  tabsContainer: {
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+  },
+  categoryTab: {
+    marginHorizontal: 4,
+    borderRadius: 20,
+    minWidth: 100,
+  },
+  categoryTabLabel: {
+    fontSize: 12,
     fontWeight: 'bold',
-    marginTop: 5,
   },
-  challengesContainer: {
-    paddingRight: 16,
+  selectedCategoryTab: {
+    backgroundColor: '#2196F3',
+    borderColor: '#2196F3',
+    elevation: 3,
+  },
+  selectedCategoryTabLabel: {
+    color: 'white',
+  },
+  challengeGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginTop: 12,
+  },
+  challengeGridCard: {
+    width: '48%',
+    marginBottom: 12,
+    borderRadius: 16,
+    elevation: 3,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  challengeGridCardContent: {
+    padding: 16,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    height: 140,
+  },
+  challengeIconContainer: {
+    marginBottom: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  challengeGridTitle: {
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 10,
+    fontWeight: 'bold',
+    lineHeight: 18,
+  },
+  challengeGridPoints: {
+    fontWeight: 'bold',
+    fontSize: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(0,0,0,0.05)',
   },
   emptyCard: {
     marginVertical: 8,
@@ -592,31 +850,87 @@ const styles = StyleSheet.create({
     bottom: 20,
   },
   groupCodeCard: {
-    marginTop: 10,
-    marginBottom: 10,
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 8,
+    borderRadius: 8,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#2196F3',
+  },
+  groupCodeContent: {
+    padding: 4,
   },
   groupCodeTitle: {
     fontSize: 16,
     fontWeight: 'bold',
+    color: '#2196F3',
+    textAlign: 'center',
+    marginBottom: 4,
   },
   groupCodeContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#f5f5f5',
-    borderRadius: 4,
+    backgroundColor: '#E3F2FD',
+    borderRadius: 6,
     padding: 8,
-    marginVertical: 8,
+    marginVertical: 6,
+    borderWidth: 1,
+    borderColor: '#BBDEFB',
   },
   groupCode: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
     letterSpacing: 1,
+    color: '#0D47A1',
+    flex: 1,
+    textAlign: 'center',
+  },
+  
+  copyButton: {
+    backgroundColor: '#2196F3',
+    marginLeft: 12,
+    height: 40,
+  },
+  copyButtonLabel: {
+    fontSize: 14,
+    fontWeight: 'bold',
   },
   groupCodeHelp: {
-    fontSize: 12,
-    color: '#666',
-    fontStyle: 'italic',
+    fontSize: 14,
+    color: '#555',
+    textAlign: 'center',
+    marginTop: 8,
+    paddingHorizontal: 8,
+  },
+  // Challenge card styles
+  challengeCard: {
+    marginVertical: 8,
+    borderRadius: 12,
+    elevation: 3,
+    backgroundColor: 'white',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    overflow: 'hidden',
+  },
+  challengeTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 8,
+    color: '#333',
+    lineHeight: 22,
+  },
+  challengePoints: {
+    fontWeight: 'bold',
+    fontSize: 16,
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(0,0,0,0.05)',
+    alignSelf: 'flex-start',
   },
 });
 

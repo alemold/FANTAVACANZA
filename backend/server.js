@@ -363,7 +363,8 @@ app.get('/api/challenges/categories', (req, res) => {
         description, 
         points, 
         status, 
-        is_active 
+        is_active,
+        ripetibile
       FROM challenges 
       WHERE is_active = 1
     `;
@@ -442,10 +443,9 @@ app.post('/api/groups', (req, res) => {
         
         // Return the newly created group
         const getGroupQuery = `
-          SELECT g.*, COUNT(gm.user_id) as participants, COALESCE(SUM(u.total_points), 0) as points
+          SELECT g.*, COUNT(gm.user_id) as participants, COALESCE(SUM(gm.points), 0) as points
           FROM game_groups g
           LEFT JOIN group_users gm ON g.id = gm.group_id
-          LEFT JOIN users u ON gm.user_id = u.id
           WHERE g.id = ?
           GROUP BY g.id
         `;
@@ -471,7 +471,7 @@ app.get('/api/groups/user/:userId', (req, res) => {
   const userId = req.params.userId;
   
   const query = `
-    SELECT g.*, COUNT(gm2.user_id) as participants, COALESCE(SUM(u.total_points), 0) as points
+    SELECT g.*, COUNT(gm2.user_id) as participants, COALESCE(SUM(gm2.points), 0) as points
     FROM game_groups g
     JOIN group_users gm1 ON g.id = gm1.group_id AND gm1.user_id = ?
     LEFT JOIN group_users gm2 ON g.id = gm2.group_id
@@ -513,10 +513,9 @@ app.get('/api/groups/:groupId', (req, res) => {
   if (isNumericId) {
     // Use numeric ID query
     groupQuery = `
-      SELECT g.*, COUNT(gm.user_id) as participants, COALESCE(SUM(u.total_points), 0) as points
+      SELECT g.*, COUNT(gm.user_id) as participants, COALESCE(SUM(gm.points), 0) as points
       FROM game_groups g
       LEFT JOIN group_users gm ON g.id = gm.group_id
-      LEFT JOIN users u ON gm.user_id = u.id
       WHERE g.id = ?
       GROUP BY g.id
     `;
@@ -524,10 +523,9 @@ app.get('/api/groups/:groupId', (req, res) => {
   } else {
     // Use alphanumeric group_id query
     groupQuery = `
-      SELECT g.*, COUNT(gm.user_id) as participants, COALESCE(SUM(u.total_points), 0) as points
+      SELECT g.*, COUNT(gm.user_id) as participants, COALESCE(SUM(gm.points), 0) as points
       FROM game_groups g
       LEFT JOIN group_users gm ON g.id = gm.group_id
-      LEFT JOIN users u ON gm.user_id = u.id
       WHERE g.group_id = ?
       GROUP BY g.id
     `;
@@ -546,11 +544,11 @@ app.get('/api/groups/:groupId', (req, res) => {
     
     // Get group members
     const membersQuery = `
-      SELECT u.id, u.username, u.avatar_url, u.total_points as points, gm.role
+      SELECT u.id, u.username, u.avatar_url, gm.points, gm.role
       FROM group_users gm
       JOIN users u ON gm.user_id = u.id
       WHERE gm.group_id = ?
-      ORDER BY u.total_points DESC
+      ORDER BY gm.points DESC
     `;
     
     db.query(membersQuery, [groups[0].id], (err, members) => {
@@ -606,11 +604,11 @@ app.get('/api/groups/:groupId/participants', (req, res) => {
   const groupId = req.params.groupId;
   
   const query = `
-    SELECT u.id as user_id, u.username, u.avatar_url, u.total_points as points, gu.role
+    SELECT u.id as user_id, u.username, u.avatar_url, gu.points, gu.role
     FROM group_users gu
     JOIN users u ON gu.user_id = u.id
     WHERE gu.group_id = ?
-    ORDER BY u.total_points DESC
+    ORDER BY gu.points DESC
   `;
   
   db.query(query, [groupId], (err, participants) => {
@@ -764,7 +762,7 @@ app.post('/api/groups/:groupId/invite', (req, res) => {
             res.json({ 
               invite_code: inviteCode, 
               expires_at: expiryDate,
-              invite_link: `fantavacanze://join?code=${inviteCode}`,
+              invite_link: `https://fantavacanza.com/join?code=${inviteCode}`,
               message: 'Codice di invito generato con successo' 
             });
         });
@@ -780,7 +778,7 @@ app.post('/api/groups/:groupId/invite', (req, res) => {
             res.json({ 
               invite_code: inviteCode, 
               expires_at: expiryDate,
-              invite_link: `fantavacanze://join?code=${inviteCode}`,
+              invite_link: `https://fantavacanza.com/join?code=${inviteCode}`,
               message: 'Codice di invito generato con successo' 
             });
         });
@@ -926,7 +924,7 @@ function handleJoinGroup(req, res) {
         
         // Get updated group data with accurate participant count
         const updateQuery = `
-          SELECT g.*, COUNT(gm.user_id) as participants, COALESCE(SUM(u.total_points), 0) as points
+          SELECT g.*, COUNT(gm.user_id) as participants, COALESCE(SUM(gm.points), 0) as points
           FROM game_groups g
           LEFT JOIN group_users gm ON g.id = gm.group_id
           LEFT JOIN users u ON gm.user_id = u.id
@@ -953,6 +951,15 @@ function handleJoinGroup(req, res) {
     });
   }
 }
+
+// Challenge Completion Routes
+const challengeCompletionRoutes = require('./challenge_completion_routes');
+
+// Add database middleware to the challenge completion routes
+app.use('/api/challenge-completions', (req, res, next) => {
+  req.db = db;
+  next();
+}, challengeCompletionRoutes);
 
 // Start the server
 app.listen(PORT, () => {

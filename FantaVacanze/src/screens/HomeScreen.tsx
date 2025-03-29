@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, FlatList, TouchableOpacity, Modal, Dimensions, Animated, Keyboard, KeyboardEvent, Platform, Easing, Clipboard, ScrollView } from 'react-native';
 import CustomHeader from '../components/CustomHeader';
 import { Text, Card, Button, FAB, Title, Paragraph, Portal, TextInput, ActivityIndicator, Snackbar } from 'react-native-paper';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { groupService } from '../services/api';
+import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect } from '@react-navigation/native';
 
 type HomeScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Home'>;
 
@@ -47,24 +49,31 @@ const HomeScreen = ({ navigation }: Props) => {
   const overlayOpacityAnim = React.useRef(new Animated.Value(0)).current;
   
   // Fetch groups from the database when component mounts
-  useEffect(() => {
-    const fetchGroups = async () => {
-      try {
-        setLoading(true);
-        const response = await groupService.getUserGroups();
-        if (response && response.groups) {
-          setGroups(response.groups);
+  useFocusEffect(
+    useCallback(() => {
+      const fetchGroups = async () => {
+        try {
+          setLoading(true);
+          const response = await groupService.getUserGroups();
+          if (response && response.groups) {
+            setGroups(response.groups);
+          }
+        } catch (err) {
+          console.error('Error fetching groups:', err);
+          setError('Errore nel caricamento dei gruppi');
+        } finally {
+          setLoading(false);
         }
-      } catch (err) {
-        console.error('Error fetching groups:', err);
-        setError('Errore nel caricamento dei gruppi');
-      } finally {
-        setLoading(false);
-      }
-    };
-  
-    fetchGroups();
-  }, []);
+      };
+    
+      fetchGroups();
+      
+      // Return a cleanup function if needed
+      return () => {
+        // Any cleanup code here
+      };
+    }, [])  // Empty dependency array means this will run on each focus
+  );
   
   const handleCreateGroup = async () => {
     // Reset error state
