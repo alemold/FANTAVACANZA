@@ -58,11 +58,11 @@ router.post('/', async (req, res) => {
             return res.status(500).json({ error: 'Error beginning transaction' });
           }
           
-          // Insert the new completion
+          // Insert the new completion with approved=0 (pending approval)
           const insertQuery = `
             INSERT INTO challenge_completions 
-            (group_id, user_id, challenge_id, evidence_url, points, notes) 
-            VALUES (?, ?, ?, ?, ?, ?)
+            (group_id, user_id, challenge_id, evidence_url, points, notes, approved) 
+            VALUES (?, ?, ?, ?, ?, ?, 0)
           `;
           
           req.db.query(
@@ -76,55 +76,11 @@ router.post('/', async (req, res) => {
                 });
               }
               
-              // Update the user's points for this specific group
-              const updateGroupPointsQuery = 'UPDATE group_users SET points = points + ? WHERE group_id = ? AND user_id = ?';
-              req.db.query(updateGroupPointsQuery, [points, group_id, user_id], (err) => {
-                if (err) {
-                  return req.db.rollback(() => {
-                    console.error('Error updating group points:', err);
-                    res.status(500).json({ error: 'Error updating group points' });
-                  });
-                }
-                
-                // Update user's total points
-                const updatePointsQuery = 'UPDATE users SET total_points = total_points + ? WHERE id = ?';
-                req.db.query(updatePointsQuery, [points, user_id], (err, result) => {
-                  if (err) {
-                    return req.db.rollback(() => {
-                      console.error('Error updating user points:', err);
-                      res.status(500).json({ error: 'Error updating user points' });
-                    });
-                  }
-                  
-                  // Commit the transaction
-                  req.db.commit(err => {
-                    if (err) {
-                      return req.db.rollback(() => {
-                        console.error('Error committing transaction:', err);
-                        res.status(500).json({ error: 'Error committing transaction' });
-                      });
-                    }
-                    
-                    // Get updated user data
-                    req.db.query('SELECT total_points FROM users WHERE id = ?', [user_id], (err, users) => {
-                      if (err) {
-                        console.error('Error fetching updated user data:', err);
-                        return res.status(500).json({ 
-                          success: true,
-                          message: 'Challenge completion recorded successfully, but unable to fetch updated points' 
-                        });
-                      }
-                      
-                      res.status(201).json({
-                        success: true,
-                        message: 'Challenge completion recorded successfully',
-                        completion_id: result.insertId,
-                        points: points,
-                        total_points: users[0].total_points
-                      });
-                    });
-                  });
-                });
+              // Do not update points yet: the challenge is pending approval
+              res.status(201).json({
+                success: true,
+                message: 'Challenge completion recorded pending approval',
+                completion_id: result.insertId
               });
             }
           );
@@ -135,6 +91,90 @@ router.post('/', async (req, res) => {
     console.error('Server error recording challenge completion:', error);
     res.status(500).json({ error: 'Server error recording challenge completion' });
   }
+});
+
+/**
+ * @route POST /api/challenge-completions/:completionId/approve
+ * @desc Approve a challenge completion
+ * @access Private
+ */
+router.post('/:completionId/approve', (req, res) => {
+  const completionId = req.params.completionId;
+  const { approver_id } = req.body; // ID of the user approving
+
+  if (!approver_id) {
+    return res.status(400).json({ error: 'Approver ID is required' });
+  }
+
+  // Get the completion to verify the user who recorded it
+  req.db.query('SELECT * FROM challenge_completions WHERE id = ?', [completionId], (err, completions) => {
+    if (err) {
+      console.error('Error fetching challenge completion:', err);
+      return res.status(500).json({ error: 'Error fetching challenge completion' });
+    }
+    if (completions.length === 0) {
+      return res.status(404).json({ error: 'Completion not found' });
+    }
+    
+    const completion = completions[0];
+    if (completion.approved === 1) {
+      return res.status(409).json({ error: 'Completion already approved' });
+    }
+    if (completion.user_id === approver_id) {
+      return res.status(400).json({ error: 'Approver must be different from the completer' });
+    }
+    
+    // Start a transaction to update the completion and assign points
+    req.db.beginTransaction(err => {
+      if (err) {
+        console.error('Transaction error:', err);
+        return res.status(500).json({ error: 'Error starting transaction' });
+      }
+      
+      // Update the completion setting approved to 1 and recording approved_by
+      const updateQuery = 'UPDATE challenge_completions SET approved = 1, approved_by = ? WHERE id = ?';
+      req.db.query(updateQuery, [approver_id, completionId], (err, result) => {
+        if (err) {
+          console.error('Error approving completion:', err);
+          return req.db.rollback(() => {
+            res.status(500).json({ error: 'Error approving challenge' });
+          });
+        }
+        
+        // Update the user's points in the users table
+        const updatePointsQuery = 'UPDATE users SET total_points = total_points + ? WHERE id = ?';
+        req.db.query(updatePointsQuery, [completion.points, completion.user_id], (err, result) => {
+          if (err) {
+            console.error('Error updating user points:', err);
+            return req.db.rollback(() => {
+              res.status(500).json({ error: 'Error updating user points' });
+            });
+          }
+          
+          // MODIFICA: Aggiorna anche i punti nella tabella group_users
+          const updateGroupUsersQuery = 'UPDATE group_users SET points = points + ? WHERE user_id = ? AND group_id = ?';
+          req.db.query(updateGroupUsersQuery, [completion.points, completion.user_id, completion.group_id], (err, result) => {
+            if (err) {
+              console.error('Error updating group users points:', err);
+              return req.db.rollback(() => {
+                res.status(500).json({ error: 'Error updating group users points' });
+              });
+            }
+            
+            req.db.commit(err => {
+              if (err) {
+                console.error('Commit error:', err);
+                return req.db.rollback(() => {
+                  res.status(500).json({ error: 'Error committing transaction' });
+                });
+              }
+              res.json({ success: true, message: 'Challenge approved and points assigned successfully' });
+            });
+          });
+        });
+      });
+    });
+  });
 });
 
 /**

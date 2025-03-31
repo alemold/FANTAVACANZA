@@ -8,6 +8,7 @@ import { groupService } from '../services/api';
 import { challengeCompletionService } from '../services/challengeCompletionService';
 import * as ImagePicker from 'expo-image-picker';
 import CustomHeader from '../components/CustomHeader';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type ChallengeCompletionScreenNavigationProp = StackNavigationProp<RootStackParamList, 'ChallengeCompletion'>;
 type ChallengeCompletionScreenRouteProp = RouteProp<RootStackParamList, 'ChallengeCompletion'>;
@@ -41,6 +42,7 @@ interface ChallengeCompletion {
   category_name?: string;
   username?: string;
   avatar_url?: string;
+  approved?: number;
 }
 
 const ChallengeCompletionScreen = ({ navigation, route }: Props) => {
@@ -53,9 +55,10 @@ const ChallengeCompletionScreen = ({ navigation, route }: Props) => {
   const [error, setError] = useState('');
   const [evidenceImage, setEvidenceImage] = useState<string | null>(null);
   const [notes, setNotes] = useState('');
-  const [activeTab, setActiveTab] = useState<'available' | 'completed'>('available');
+  const [activeTab, setActiveTab] = useState<'available' | 'pending' | 'completed'>('available');
   const [filterCategory, setFilterCategory] = useState<string | null>(null);
   const [categories, setCategories] = useState<{id: string, name: string}[]>([]);
+  const [currentUser, setCurrentUser] = useState<any>(null);
 
   // Fetch challenges and completions
   useEffect(() => {
@@ -67,8 +70,8 @@ const ChallengeCompletionScreen = ({ navigation, route }: Props) => {
         // Fetch group challenges
         const challengesResponse = await groupService.getGroupChallenges(groupId);
         
-        // Fetch user's completions for this group
-        const completionsResponse = await challengeCompletionService.getUserCompletions(groupId);
+        // MODIFICA: Fetch tutti i completamenti per il gruppo
+        const completionsResponse = await challengeCompletionService.getGroupCompletions(groupId);
         
         if (challengesResponse.challenges) {
           setChallenges(challengesResponse.challenges);
@@ -107,6 +110,16 @@ const ChallengeCompletionScreen = ({ navigation, route }: Props) => {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert('Permesso negato', 'È necessario concedere il permesso alla fotocamera per caricare le prove.');
+      }
+    })();
+  }, []);
+
+  // Carica utente corrente da AsyncStorage
+  useEffect(() => {
+    (async () => {
+      const userData = await AsyncStorage.getItem('user');
+      if (userData) {
+        setCurrentUser(JSON.parse(userData));
       }
     })();
   }, []);
@@ -159,7 +172,7 @@ const ChallengeCompletionScreen = ({ navigation, route }: Props) => {
     }
   };
 
-  // Submit challenge completion
+  // Submit challenge completion, set approved as 0
   const handleSubmitCompletion = async () => {
     if (!selectedChallenge) return;
     
@@ -190,7 +203,8 @@ const ChallengeCompletionScreen = ({ navigation, route }: Props) => {
             evidence_url: evidenceImage || undefined,
             points: response.points,
             notes: notes || undefined,
-            challenge_description: challenge.description
+            challenge_description: challenge.description,
+            approved: 0
           };
           
           setCompletions([newCompletion, ...completions]);
@@ -213,6 +227,33 @@ const ChallengeCompletionScreen = ({ navigation, route }: Props) => {
       Alert.alert('Errore', err.message || 'Errore durante la registrazione del completamento');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  // Funzione per approvare un completamento
+  const handleApproveCompletion = async (completionId: string) => {
+    if (!currentUser) return;
+    try {
+      const response = await fetch(`http://192.168.1.11:3001/api/challenge-completions/${completionId}/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ approver_id: currentUser.id })
+      });
+      const data = await response.json();
+      if (response.ok) {
+        Alert.alert('Successo', 'Sfida approvata con successo');
+        // Aggiorna il listato dei completamenti
+        setCompletions(prev =>
+          prev.map(comp =>
+            comp.id === completionId ? { ...comp, approved: 1 } : comp
+          )
+        );
+      } else {
+        Alert.alert('Errore', data.error || 'Errore nell approvazione della sfida');
+      }
+    } catch (err) {
+      console.error('Error approving completion:', err);
+      Alert.alert('Errore', 'Errore nell approvazione della sfida');
     }
   };
 
@@ -273,6 +314,32 @@ const ChallengeCompletionScreen = ({ navigation, route }: Props) => {
     );
   };
 
+  // Render per completamenti in attesa con pulsante Approva
+  const renderPendingItem = ({ item }: { item: ChallengeCompletion }) => (
+    <Card style={styles.completionCard}>
+      <Card.Content>
+        <Title style={styles.completionTitle}>{item.challenge_description}</Title>
+        <Paragraph style={styles.completionDate}>
+          Completata il: {new Date(item.completion_date).toLocaleString()}
+        </Paragraph>
+        <Paragraph style={styles.completionPoints}>
+          +{item.points} punti (in attesa)
+        </Paragraph>
+        {item.evidence_url && (
+          <View style={styles.evidenceContainer}>
+            <Image source={{ uri: item.evidence_url }} style={styles.evidenceImage} />
+          </View>
+        )}
+        {/* MODIFICA: mostra il pulsante Approva per tutti i completamenti pending */}
+        {item.approved === 0 && (
+          <Button mode="contained" onPress={() => handleApproveCompletion(item.id)}>
+            Approva
+          </Button>
+        )}
+      </Card.Content>
+    </Card>
+  );
+
   // Render a completion item
   const renderCompletionItem = ({ item }: { item: ChallengeCompletion }) => {
     const date = new Date(item.completion_date);
@@ -331,6 +398,9 @@ const ChallengeCompletionScreen = ({ navigation, route }: Props) => {
     </ScrollView>
   );
 
+  const pendingCount = completions.filter(c => c.approved === 0).length;
+  const completedCount = completions.filter(c => c.approved === 1).length;
+
   // Show loading indicator while fetching data
   if (loading) {
     return (
@@ -353,22 +423,36 @@ const ChallengeCompletionScreen = ({ navigation, route }: Props) => {
         >
           Sfide Disponibili
         </Button>
+        <Button
+          mode={activeTab === 'pending' ? 'contained' : 'outlined'}
+          onPress={() => setActiveTab('pending')}
+          style={[styles.tabButton, activeTab === 'pending' && styles.activeTabButton]}
+        >
+          <View style={styles.tabButtonContent}>
+            <Text>In Attesa</Text>
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>{pendingCount}</Text>
+            </View>
+          </View>
+        </Button>
         <Button 
           mode={activeTab === 'completed' ? 'contained' : 'outlined'}
           onPress={() => setActiveTab('completed')}
           style={[styles.tabButton, activeTab === 'completed' && styles.activeTabButton]}
         >
-          Completate
+          <View style={styles.tabButtonContent}>
+            <Text>Completate</Text>
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>{completedCount}</Text>
+            </View>
+          </View>
         </Button>
       </View>
       
       <ScrollView>
         {activeTab === 'available' ? (
           <>
-            {/* Category filters */}
             {renderCategoryFilters()}
-            
-            {/* Available challenges */}
             <View style={styles.challengesContainer}>
               {getFilteredChallenges().length > 0 ? (
                 <FlatList
@@ -383,8 +467,6 @@ const ChallengeCompletionScreen = ({ navigation, route }: Props) => {
                 </Text>
               )}
             </View>
-            
-            {/* Challenge completion form */}
             {selectedChallenge && (
               <Card style={styles.formCard}>
                 <Card.Content>
@@ -445,22 +527,20 @@ const ChallengeCompletionScreen = ({ navigation, route }: Props) => {
               </Card>
             )}
           </>
+        ) : activeTab === 'pending' ? (
+          <FlatList
+            data={completions.filter(c => c.approved === 0)}
+            renderItem={renderPendingItem}
+            keyExtractor={(item) => item.id}
+            scrollEnabled={false}
+          />
         ) : (
-          <>
-            {/* Completed challenges */}
-            <View style={styles.completionsContainer}>
-              {completions.length > 0 ? (
-                <FlatList
-                  data={completions}
-                  renderItem={renderCompletionItem}
-                  keyExtractor={(item) => item.id}
-                  scrollEnabled={false}
-                />
-              ) : (
-                <Text style={styles.emptyText}>Non hai ancora completato nessuna sfida</Text>
-              )}
-            </View>
-          </>
+          <FlatList
+            data={completions.filter(c => c.approved === 1)}
+            renderItem={renderCompletionItem}
+            keyExtractor={(item) => item.id}
+            scrollEnabled={false}
+          />
         )}
       </ScrollView>
     </View>
@@ -621,6 +701,21 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 24,
     marginBottom: 24,
+  },
+  tabButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badge: {
+    backgroundColor: 'red',
+    borderRadius: 10,
+    paddingHorizontal: 5,
+    marginLeft: 5,
+  },
+  badgeText: {
+    color: 'white',
+    fontSize: 12,
   },
 });
 
