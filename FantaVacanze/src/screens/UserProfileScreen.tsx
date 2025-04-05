@@ -20,7 +20,9 @@ interface UserData {
   id: string;
   username: string;
   total_points: number;
+  completed_challenges: number; // Aggiunto questo campo
   avatar_url?: string;
+  group_count: number; // Added field for groups count
 }
 
 const UserProfileScreen = ({ navigation, route }: Props) => {
@@ -47,8 +49,7 @@ const UserProfileScreen = ({ navigation, route }: Props) => {
         
         // Fetch the user data from the API
         const response = await userService.getProfile(userId);
-        
-        if (response && response.user) {
+            if (response && response.user) {
           setUserData(response.user);
         } else {
           setError('Errore nel caricamento dei dati utente');
@@ -118,12 +119,12 @@ const UserProfileScreen = ({ navigation, route }: Props) => {
               </View>
               
               <View style={styles.statItem}>
-                <Text style={styles.statValue}>0</Text>
+                <Text style={styles.statValue}>{userData?.completed_challenges || 0}</Text>
                 <Text style={styles.statLabel}>Attività Completate</Text>
               </View>
               
               <View style={styles.statItem}>
-                <Text style={styles.statValue}>0</Text>
+                <Text style={styles.statValue}>{userData?.group_count || 0}</Text>
                 <Text style={styles.statLabel}>Gruppi</Text>
               </View>
             </View>

@@ -141,8 +141,8 @@ router.post('/:completionId/approve', (req, res) => {
           });
         }
         
-        // Update the user's points in the users table
-        const updatePointsQuery = 'UPDATE users SET total_points = total_points + ? WHERE id = ?';
+        // Update the user's points in the users table and increment completed_challenges
+        const updatePointsQuery = 'UPDATE users SET total_points = total_points + ?, completed_challenges = completed_challenges + 1 WHERE id = ?';
         req.db.query(updatePointsQuery, [completion.points, completion.user_id], (err, result) => {
           if (err) {
             console.error('Error updating user points:', err);
@@ -161,15 +161,35 @@ router.post('/:completionId/approve', (req, res) => {
               });
             }
             
-            req.db.commit(err => {
-              if (err) {
-                console.error('Commit error:', err);
-                return req.db.rollback(() => {
-                  res.status(500).json({ error: 'Error committing transaction' });
+            // Helper function to update user points with retries on lock wait timeout
+            function updateUserPoints(completion, retryCount = 0) {
+              const updatePointsQuery = 'UPDATE users SET total_points = total_points + ?, completed_challenges = completed_challenges + 1 WHERE id = ?';
+              req.db.query(updatePointsQuery, [completion.points, completion.user_id], (err, result) => {
+                if (err) {
+                  if (err.code === 'ER_LOCK_WAIT_TIMEOUT' && retryCount < 3) {
+                    console.warn(`Lock wait timeout, retrying update user points (attempt ${retryCount + 1})`);
+                    return updateUserPoints(completion, retryCount + 1);
+                  }
+                  console.error('Error updating user points:', err);
+                  return req.db.rollback(() => {
+                    res.status(500).json({ error: 'Error updating user points' });
+                  });
+                }
+                // Commit the transaction upon successful update
+                req.db.commit(err => {
+                  if (err) {
+                    console.error('Error committing transaction:', err);
+                    return req.db.rollback(() => {
+                      res.status(500).json({ error: 'Error committing transaction' });
+                    });
+                  }
+                  res.json({ success: true, message: 'Challenge approved and points assigned successfully' });
                 });
-              }
-              res.json({ success: true, message: 'Challenge approved and points assigned successfully' });
-            });
+              });
+            }
+
+            // Instead of directly executing the update, call the helper:
+            updateUserPoints(completion);
           });
         });
       });
@@ -277,8 +297,12 @@ router.delete('/:completionId', (req, res) => {
             });
           }
           
-          // Update user's total points (subtract the challenge points)
-          db.query('UPDATE users SET total_points = total_points - ? WHERE id = ?', [points, userId], (err, result) => {
+          // Update user's total points (subtract the challenge points) and decrement completed_challenges if approved=1
+          const completionStatus = completion.approved || 0;
+          const challengesModifier = completionStatus === 1 ? 1 : 0; // Decrement only if was approved
+          
+          db.query('UPDATE users SET total_points = total_points - ?, completed_challenges = completed_challenges - ? WHERE id = ?', 
+            [points, challengesModifier, userId], (err, result) => {
             if (err) {
               return db.rollback(() => {
                 console.error('Error updating user points:', err);

@@ -98,7 +98,7 @@ app.post('/api/register', async (req, res) => {
 
       // Return user data without password
       const userId = result.insertId;
-      const userQuery = 'SELECT id, username, email, auth_provider, avatar_url, total_points, created_at FROM users WHERE id = ?';
+      const userQuery = 'SELECT id, username, email, auth_provider, avatar_url, total_points, completed_challenges, created_at FROM users WHERE id = ?';
       db.query(userQuery, [userId], (err, users) => {
         if (err) {
           console.error('Error fetching user data:', err);
@@ -175,7 +175,7 @@ app.post('/api/login', async (req, res) => {
             
             // Return the newly created user
             const userId = result.insertId;
-            const userQuery = 'SELECT id, username, email, auth_provider, avatar_url, total_points, created_at FROM users WHERE id = ?';
+            const userQuery = 'SELECT id, username, email, auth_provider, avatar_url, total_points, completed_challenges, created_at FROM users WHERE id = ?';
             db.query(userQuery, [userId], (err, newUsers) => {
               if (err) {
                 console.error('Error fetching new user data:', err);
@@ -228,7 +228,14 @@ app.post('/api/login', async (req, res) => {
 app.get('/api/users/:id', (req, res) => {
   const userId = req.params.id;
   
-  const query = 'SELECT id, username, email, auth_provider, avatar_url, total_points, created_at FROM users WHERE id = ?';
+  // Updated query to include a count of groups the user belongs to
+  const query = `
+    SELECT u.id, u.username, u.email, u.auth_provider, u.avatar_url, u.total_points, u.completed_challenges, u.created_at,
+    (SELECT COUNT(*) FROM group_users   WHERE user_id = u.id) as group_count
+    FROM users u
+    WHERE u.id = ?
+  `;
+  
   db.query(query, [userId], (err, users) => {
     if (err) {
       console.error('Error fetching user profile:', err);
@@ -298,7 +305,7 @@ app.put('/api/users/:id', async (req, res) => {
       }
       
       // Return updated user data
-      const userQuery = 'SELECT id, username, email, auth_provider, avatar_url, total_points, created_at FROM users WHERE id = ?';
+      const userQuery = 'SELECT id, username, email, auth_provider, avatar_url, total_points, completed_challenges, created_at FROM users WHERE id = ?';
       db.query(userQuery, [userId], (err, users) => {
         if (err) {
           console.error('Error fetching updated user data:', err);
@@ -471,7 +478,10 @@ app.get('/api/groups/user/:userId', (req, res) => {
   const userId = req.params.userId;
   
   const query = `
-    SELECT g.*, COUNT(gm2.user_id) as participants, COALESCE(SUM(gm2.points), 0) as points
+    SELECT g.*, 
+           COUNT(gm2.user_id) as participants, 
+           COALESCE(SUM(gm2.points), 0) as points,
+           (SELECT points FROM group_users WHERE group_id = g.id AND user_id = ?) as user_points
     FROM game_groups g
     JOIN group_users gm1 ON g.id = gm1.group_id AND gm1.user_id = ?
     LEFT JOIN group_users gm2 ON g.id = gm2.group_id
@@ -480,7 +490,7 @@ app.get('/api/groups/user/:userId', (req, res) => {
     ORDER BY g.created_at DESC
   `;
   
-  db.query(query, [userId], (err, groups) => {
+  db.query(query, [userId, userId], (err, groups) => {
     if (err) {
       console.error('Error fetching user groups:', err);
       return res.status(500).json({ error: 'Errore durante il recupero dei gruppi dell\'utente' });

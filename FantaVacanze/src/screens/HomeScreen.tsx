@@ -19,7 +19,8 @@ interface GroupData {
   id: string;
   name: string;
   participants: number;
-  points: number;
+  points: number; // Punti totali del gruppo
+  user_points: number; // Punti dell'utente in questo gruppo
   created_at: string;
 }
 
@@ -275,7 +276,7 @@ const HomeScreen = ({ navigation }: Props) => {
           <Title style={styles.cardTitle}>{item.name}</Title>
           <View style={styles.detailsRow}>
             <Text style={styles.participants}>Partecipanti: {item.participants}</Text>
-            <Text style={styles.points}>{item.points} punti</Text>
+            <Text style={styles.points}>{item.user_points} punti</Text>
           </View>
           <Text style={styles.date}>Creato il: {item.created_at}</Text>
         </Card.Content>

@@ -19,7 +19,9 @@ interface UserData {
   username: string;
   email: string;
   total_points: number;
+  completed_challenges: number; // Aggiunto questo campo
   avatar_url?: string;
+  group_count: number; // Added field for groups count
   // Add other fields as needed
 }
 
@@ -437,13 +439,13 @@ const ProfileScreen = ({ navigation }: Props) => {
             </View>
             
             <View style={styles.statItem}>
-              <Text style={styles.statValue}>0</Text>
+              <Text style={styles.statValue}>{userData?.completed_challenges || 0}</Text>
               <Text style={styles.statLabel}>Attività Completate</Text>
             </View>
             
             <View style={styles.statItem}>
-              <Text style={styles.statValue}>0</Text>
-              <Text style={styles.statLabel}>Vacanze</Text>
+              <Text style={styles.statValue}>{userData?.group_count || 0}</Text>
+              <Text style={styles.statLabel}>Gruppi</Text>
             </View>
           </View>
         </Card.Content>

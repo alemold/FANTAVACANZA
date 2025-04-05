@@ -197,13 +197,14 @@ const ChallengeCompletionScreen = ({ navigation, route }: Props) => {
           const newCompletion: ChallengeCompletion = {
             id: response.completion_id.toString(),
             group_id: groupId,
-            user_id: '', // Will be filled by the backend
+            user_id: currentUser?.id || '',
             challenge_id: selectedChallenge,
             completion_date: new Date().toISOString(),
             evidence_url: evidenceImage || undefined,
-            points: response.points,
+            points: challenge.points, // Use challenge points directly instead of response.points
             notes: notes || undefined,
             challenge_description: challenge.description,
+            category_name: challenge.category_name,
             approved: 0
           };
           
@@ -218,8 +219,8 @@ const ChallengeCompletionScreen = ({ navigation, route }: Props) => {
         // Show success message
         Alert.alert('Successo', 'Sfida completata con successo! Hai guadagnato ' + response.points + ' punti.');
         
-        // Switch to completed tab
-        setActiveTab('completed');
+        // Switch to pending tab instead of completed
+        setActiveTab('pending');
       }
     } catch (err: any) {
       console.error('Error submitting completion:', err);
@@ -315,30 +316,40 @@ const ChallengeCompletionScreen = ({ navigation, route }: Props) => {
   };
 
   // Render per completamenti in attesa con pulsante Approva
-  const renderPendingItem = ({ item }: { item: ChallengeCompletion }) => (
-    <Card style={styles.completionCard}>
-      <Card.Content>
-        <Title style={styles.completionTitle}>{item.challenge_description}</Title>
-        <Paragraph style={styles.completionDate}>
-          Completata il: {new Date(item.completion_date).toLocaleString()}
-        </Paragraph>
-        <Paragraph style={styles.completionPoints}>
-          +{item.points} punti (in attesa)
-        </Paragraph>
-        {item.evidence_url && (
-          <View style={styles.evidenceContainer}>
-            <Image source={{ uri: item.evidence_url }} style={styles.evidenceImage} />
-          </View>
-        )}
-        {/* MODIFICA: mostra il pulsante Approva per tutti i completamenti pending */}
-        {item.approved === 0 && (
-          <Button mode="contained" onPress={() => handleApproveCompletion(item.id)}>
-            Approva
-          </Button>
-        )}
-      </Card.Content>
-    </Card>
-  );
+  const renderPendingItem = ({ item }: { item: ChallengeCompletion }) => {
+    // Check if current user is the one who completed the challenge
+    const isOwnCompletion = currentUser && item.user_id === currentUser.id;
+    
+    return (
+      <Card style={styles.completionCard}>
+        <Card.Content>
+          <Title style={styles.completionTitle}>{item.challenge_description}</Title>
+          <Paragraph style={styles.completionDate}>
+            Completata il: {new Date(item.completion_date).toLocaleString()}
+          </Paragraph>
+          <Paragraph style={styles.completionPoints}>
+            +{item.points} punti (in attesa)
+          </Paragraph>
+          {item.evidence_url && (
+            <View style={styles.evidenceContainer}>
+              <Image source={{ uri: item.evidence_url }} style={styles.evidenceImage} />
+            </View>
+          )}
+          {/* MODIFICA: mostra il pulsante Approva per tutti i completamenti pending */}
+          {item.approved === 0 && (
+            <Button 
+              mode="contained" 
+              onPress={() => handleApproveCompletion(item.id)}
+              disabled={isOwnCompletion}
+              style={isOwnCompletion ? styles.disabledButton : undefined}
+            >
+              {isOwnCompletion ? "In attesa di approvazione" : "Approva"}
+            </Button>
+          )}
+        </Card.Content>
+      </Card>
+    );
+  };
 
   // Render a completion item
   const renderCompletionItem = ({ item }: { item: ChallengeCompletion }) => {
@@ -716,6 +727,10 @@ const styles = StyleSheet.create({
   badgeText: {
     color: 'white',
     fontSize: 12,
+  },
+  disabledButton: {
+    backgroundColor: '#CCCCCC', // Gray color for disabled button
+    opacity: 0.7,
   },
 });
 
