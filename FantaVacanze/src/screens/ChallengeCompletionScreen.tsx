@@ -432,7 +432,7 @@ const ChallengeCompletionScreen = ({ navigation, route }: Props) => {
           onPress={() => setActiveTab('available')}
           style={[styles.tabButton, activeTab === 'available' && styles.activeTabButton]}
         >
-          Sfide Disponibili
+          Sfide
         </Button>
         <Button
           mode={activeTab === 'pending' ? 'contained' : 'outlined'}

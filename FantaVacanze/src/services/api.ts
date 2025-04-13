@@ -10,7 +10,7 @@ WebBrowser.maybeCompleteAuthSession();
 // Base URL for API requests
 // const API_URL = 'http://localhost:3001/api'; // For local development on Windows
 // const API_URL = 'http://10.0.2.2:3001/api'; // For Android emulator
-const API_URL = 'http://192.168.1.11:3001/api'; // For iOS simulator
+const API_URL = 'http://192.168.1.8:3001/api'; // For iOS simulator
 // For physwical devices, use your computer's local IP address
 
 // Create axios instance
